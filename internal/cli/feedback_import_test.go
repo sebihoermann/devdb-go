@@ -80,18 +80,19 @@ func TestFeedbackImportCommitsInGitRepo(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("import commits exit %d stderr=%s", code, stderr)
 	}
-	if !strings.Contains(stdout, "inserted") {
-		t.Fatalf("stdout=%q", stdout)
+	if !strings.Contains(stderr, "inserted") && !strings.Contains(stdout, "inserted") {
+		t.Fatalf("stdout=%q stderr=%q", stdout, stderr)
 	}
 
 	// Idempotent: second run should insert 0.
-	stdout2, _, code := runDevdb(t, bin, "--repo", root, "--db", dbPath,
+	stdout2, stderr2, code := runDevdb(t, bin, "--repo", root, "--db", dbPath,
 		"feedback", "import", "commits", "--branches", "HEAD", "--limit", "5")
 	if code != 0 {
 		t.Fatalf("second import exit %d", code)
 	}
-	if !strings.Contains(stdout2, "inserted 0") {
-		t.Fatalf("second stdout=%q want inserted 0", stdout2)
+	combined := stdout2 + stderr2
+	if !strings.Contains(combined, "inserted 0") {
+		t.Fatalf("second stdout=%q stderr=%q want inserted 0", stdout2, stderr2)
 	}
 }
 

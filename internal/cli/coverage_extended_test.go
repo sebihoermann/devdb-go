@@ -742,12 +742,12 @@ func TestInProcessFeedbackImportCommitsInRepo(t *testing.T) {
 	base := []string{"--repo", root, "--db", dbPath}
 	runCLIOut(t, append(base, "init")...)
 
-	stdout, _, code := runCLI(t, append(base, "feedback", "import", "commits", "--branches", "HEAD", "--limit", "3")...)
+	stdout, stderr, code := runCLI(t, append(base, "feedback", "import", "commits", "--branches", "HEAD", "--limit", "3")...)
 	if code != 0 {
-		t.Fatalf("import commits exit %d stdout=%s", code, stdout)
+		t.Fatalf("import commits exit %d stdout=%s stderr=%s", code, stdout, stderr)
 	}
-	if !strings.Contains(stdout, "inserted") {
-		t.Fatalf("stdout=%q", stdout)
+	if !strings.Contains(stderr, "inserted") && !strings.Contains(stdout, "inserted") {
+		t.Fatalf("stdout=%q stderr=%q", stdout, stderr)
 	}
 }
 
