@@ -1,0 +1,5 @@
+interface:
+  display_name: "Devdb"
+  short_description: "Help with Devdb tracking workflows"
+  default_prompt: "Use this skill to work with a standalone devdb repository or any repo that uses devdb tracking. Initialize the SQLite database, log goals, plans, features, feedback, and import data or generate reports. Prefer the CLI and use --repo-root when targeting another repository."
+

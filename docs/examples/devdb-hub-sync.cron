@@ -1,0 +1,3 @@
+# Run a one-shot metadata hub reconciliation every 5 minutes.
+# Edit the repository path and log file paths to match your machine.
+*/5 * * * * cd /path/to/devdb-or-target-repo && /usr/local/bin/devdb hub-sync --json >> .devdb/hub-sync.log 2>&1

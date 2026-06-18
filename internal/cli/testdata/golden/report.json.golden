@@ -1,0 +1,31 @@
+{
+  "feedback": [
+    {
+      "created_at": "\u003cTIMESTAMP\u003e",
+      "id": "<ID>",
+      "note": "open feedback note",
+      "role": "model",
+      "severity": "med",
+      "status": "open"
+    }
+  ],
+  "quality": {
+    "missed_calls_7d": 0,
+    "open_findings": 0,
+    "open_high_feedback": 0,
+    "open_reminders": 0,
+    "open_tasks": 0,
+    "stale_arch_notes": 0
+  },
+  "status": {
+    "git_ahead": 0,
+    "git_behind": 0,
+    "git_dirty": false,
+    "in_progress_plan_items": 0,
+    "open_feedback": 1,
+    "open_plan_items": 1,
+    "overall": "planned",
+    "schema_kind": "go",
+    "schema_version": 2
+  }
+}

@@ -1,0 +1,13 @@
+[Unit]
+Description=devdb metadata hub reconciler
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/path/to/devdb-or-target-repo
+ExecStart=/usr/local/bin/devdb hub-sync --watch --interval 60
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

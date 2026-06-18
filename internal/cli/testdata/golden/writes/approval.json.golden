@@ -1,0 +1,5 @@
+{
+  "action": "request",
+  "id": "<ID>",
+  "kind": "approval"
+}

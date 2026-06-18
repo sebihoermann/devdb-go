@@ -1,0 +1,12 @@
+{
+  "in_flight": {
+    "approval_status": "none",
+    "created_at": "\u003cTIMESTAMP\u003e",
+    "id": "<ID>",
+    "item_number": 1,
+    "milestone_id": "<ID>",
+    "plan_id": "<ID>",
+    "status": "in_progress",
+    "title": "Ship feature"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "git_ahead": 0,
+  "git_behind": 0,
+  "git_dirty": false,
+  "in_progress_plan_items": 0,
+  "open_feedback": 1,
+  "open_plan_items": 1,
+  "overall": "planned",
+  "schema_kind": "go",
+  "schema_version": 2
+}
