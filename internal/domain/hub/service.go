@@ -2,7 +2,9 @@ package hub
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -12,6 +14,10 @@ import (
 	"github.com/sebihoermann/devdb-go/internal/migrate"
 	"github.com/sebihoermann/devdb-go/internal/storage"
 )
+
+// ErrAliasNotFound is returned by Unregister when no registered project has
+// the given alias (or root path).
+var ErrAliasNotFound = errors.New("alias not registered")
 
 // SyncResult summarizes a hub sync run.
 type SyncResult struct {
@@ -149,6 +155,90 @@ func Register(root, alias, registry, metadataDB string) (RegisteredProject, erro
 		_, _ = SyncOne(hub, project)
 	}
 	return project, nil
+}
+
+// Unregister removes a project from the registry and hub by alias or root path.
+// Returns ErrAliasNotFound if neither the alias nor any project's root matches.
+// The project file on disk is untouched.
+func Unregister(alias, registry, metadataDB string) error {
+	alias = strings.TrimSpace(alias)
+	if alias == "" {
+		return fmt.Errorf("alias must not be empty")
+	}
+	projects, err := ReadRegistry(registry)
+	if err != nil {
+		return err
+	}
+	resolved := alias
+	if st, err := os.Stat(expandHome(alias)); err == nil && st.IsDir() {
+		resolved, _ = filepath.Abs(expandHome(alias))
+	}
+	filtered := projects[:0]
+	found := false
+	for _, p := range projects {
+		if p.Alias == alias || p.Root == resolved {
+			found = true
+			continue
+		}
+		filtered = append(filtered, p)
+	}
+	if !found {
+		return fmt.Errorf("%w: %s", ErrAliasNotFound, alias)
+	}
+	if err := WriteRegistry(registry, filtered); err != nil {
+		return err
+	}
+	hub, err := OpenHub(metadataDB)
+	if err != nil {
+		return err
+	}
+	defer hub.Close()
+	if _, err := hub.Exec(`DELETE FROM project_snapshots WHERE alias=?`, alias); err != nil {
+		return err
+	}
+	if _, err := hub.Exec(`DELETE FROM projects WHERE alias=?`, alias); err != nil {
+		return err
+	}
+	return nil
+}
+
+// AutoRegister walks `scope` looking for `.devdb/development.db` files and
+// registers every parent directory as a hub project. Returns the list of
+// newly-registered aliases (already-registered projects are skipped silently).
+func AutoRegister(scope, registry, metadataDB string) ([]string, error) {
+	if scope == "" {
+		scope = "."
+	}
+	absScope, err := filepath.Abs(scope)
+	if err != nil {
+		return nil, err
+	}
+	var registered []string
+	walkErr := filepath.WalkDir(absScope, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			name := d.Name()
+			if name == ".git" || name == "node_modules" || name == "vendor" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.Name() != "development.db" {
+			return nil
+		}
+		if filepath.Base(filepath.Dir(path)) != ".devdb" {
+			return nil
+		}
+		repoRoot := filepath.Dir(filepath.Dir(path))
+		alias := filepath.Base(repoRoot)
+		if _, err := Register(repoRoot, alias, registry, metadataDB); err == nil {
+			registered = append(registered, alias)
+		}
+		return nil
+	})
+	return registered, walkErr
 }
 
 // SyncAll refreshes every registered project into the hub.

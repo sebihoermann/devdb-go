@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/sebihoermann/devdb-go/internal/domain/hub"
@@ -20,6 +21,7 @@ func cmdHub(openCtx opener) *cobra.Command {
 	h.PersistentFlags().StringVar(&flagRegistry, "registry", "", "project registry path (default: ~/.devdb-projects)")
 	h.AddCommand(
 		cmdHubRegister(openCtx),
+		cmdHubUnregister(openCtx),
 		cmdHubList(openCtx),
 		cmdHubSync(openCtx),
 		cmdHubDashboard(openCtx),
@@ -32,16 +34,29 @@ func cmdHub(openCtx opener) *cobra.Command {
 
 func cmdHubRegister(openCtx opener) *cobra.Command {
 	var alias string
+	var auto bool
+	var scope string
 	c := &cobra.Command{
-		Use:   "register PATH",
-		Short: "Register a project in the hub",
-		Args:  cobra.ExactArgs(1),
+		Use:   "register [PATH]",
+		Short: "Register a project in the hub (or use --auto to walk a scope)",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := openCtx(cmd)
 			if err != nil {
 				return err
 			}
 			defer ctx.Close()
+			if auto {
+				registered, err := hub.AutoRegister(scope, flagRegistry, flagMetadataDB)
+				if err != nil {
+					return err
+				}
+				ctx.Out.Hint("auto-registered %d projects", len(registered))
+				return ctx.Out.WriteResult(strings.Join(registered, ","), map[string]any{"registered": registered})
+			}
+			if len(args) != 1 {
+				return fmt.Errorf("register requires PATH (or use --auto)")
+			}
 			p, err := hub.Register(args[0], alias, flagRegistry, flagMetadataDB)
 			if err != nil {
 				return err
@@ -51,6 +66,29 @@ func cmdHubRegister(openCtx opener) *cobra.Command {
 		},
 	}
 	c.Flags().StringVar(&alias, "alias", "", "project alias (default: directory name)")
+	c.Flags().BoolVar(&auto, "auto", false, "walk SCOPE and register every .devdb/development.db found")
+	c.Flags().StringVar(&scope, "scope", ".", "scope directory for --auto (default: cwd)")
+	return c
+}
+
+func cmdHubUnregister(openCtx opener) *cobra.Command {
+	c := &cobra.Command{
+		Use:   "unregister ALIAS_OR_PATH",
+		Short: "Remove a project from the hub by alias or root path",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx, err := openCtx(cmd)
+			if err != nil {
+				return err
+			}
+			defer ctx.Close()
+			if err := hub.Unregister(args[0], flagRegistry, flagMetadataDB); err != nil {
+				return err
+			}
+			ctx.Out.Hint("unregistered %s", args[0])
+			return ctx.Out.WriteResult(args[0], map[string]any{"removed": true})
+		},
+	}
 	return c
 }
 
