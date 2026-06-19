@@ -14,7 +14,7 @@ One SQLite DB per project at `.devdb/development.db`. Everyone writes to it. Eve
 ## Command shape
 
 ```text
-devdb [--repo PATH] [--db PATH] [--json] [--all] [--verbose] <noun> <verb> [flags]
+devdb [--repo PATH | --repo-root PATH] [--db PATH] [--json] [--all] [--verbose] <noun> <verb> [flags]
 ```
 
 Top-level reads: `init`, `status`, `quality`, `report`, `resume`, `doctor`.
@@ -354,6 +354,8 @@ Missed calls land in `missed_cli_calls` with `suggested_command` for the new gra
 
 ```bash
 devdb hub register /path/to/repo --alias myapp
+devdb hub register --auto --scope /path/to/parent    # walk + register every .devdb/development.db
+devdb hub unregister <alias_or_path>                 # remove from hub (registry + metadata)
 devdb hub list
 devdb hub sync [--strict] [--json]
 devdb hub sync --watch --interval 60
@@ -392,13 +394,13 @@ Federation queries (`hub across`) attach each project's `development.db` directl
 
 **Tasks / approval / reminders:** `task add|list|show|done|status` · `approval request|approve|reject|withdraw|list|log` · `reminder add|list|show|dismiss|snooze|unsnooze`
 
-**Hub:** `hub register|list|sync|dashboard|project|doctor|across`
+**Hub:** `hub register|unregister|list|sync|dashboard|project|doctor|across`
 
 **Hygiene / analytics:** `archive run|list|restore|gc` · `analytics missed|summary`
 
 **Reads:** `status`, `quality`, `report`, `resume`, `doctor`, `help`, `list`, `show`
 
-Global flags: `--repo`, `--db`, `--json`, `--all`, `--verbose`, `--metadata-db`, `--no-metadata-push`.
+Global flags: `--repo` (alias: `--repo-root`), `--db`, `--json`, `--all`, `--verbose`, `--metadata-db`, `--no-metadata-push`.
 
 ## Why these habits matter
 

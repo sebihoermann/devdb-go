@@ -51,10 +51,27 @@ If your project still has a Python-created `.devdb/development.db`:
 
 ```bash
 devdb import python-db .devdb/development.db          # inspect
-devdb import python-db --apply                        # in-place (backs up to .devdb/development.db.python-bak)
+devdb import python-db --apply                        # in-place; backs up + auto-archives python-only tables
+devdb import python-db --apply --no-archive-python-only  # skip auto-archive (e.g., already archived manually)
+devdb import python-db --apply --force                # override .python-bak-already-migrated guard
 ```
 
+On `--apply`, populated python-only tables (`entity_links`, `loc_snapshots`, etc.)
+are JSONL-archived to `.devdb/archive-python-only/<table>.jsonl` before the
+python DB is moved aside as `development.db.python-bak`. Pass
+`--no-archive-python-only` to opt out, `--force` to re-apply over a stale `.python-bak`.
+
 See [docs/go-native-schema-importer-mapping.md](docs/go-native-schema-importer-mapping.md) for table mapping details.
+
+## Hub register/unregister
+
+```bash
+devdb hub register /path/to/repo --alias myapp        # register one project
+devdb hub register --auto --scope /path/to/parent    # walk + register every .devdb/development.db
+devdb hub unregister myapp                            # remove a project from the hub
+```
+
+`hub register --auto` skips `.git`, `node_modules`, and `vendor` directories.
 
 ## Agent skill
 

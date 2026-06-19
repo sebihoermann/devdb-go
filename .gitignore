@@ -1,0 +1,4 @@
+.devdb/
+*.test
+*.out
+coverage.out
