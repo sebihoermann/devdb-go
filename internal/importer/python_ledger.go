@@ -2,6 +2,7 @@ package importer
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +11,12 @@ import (
 	"github.com/sebihoermann/devdb-go/internal/migrate"
 	"github.com/sebihoermann/devdb-go/internal/storage"
 )
+
+// ErrPythonBakAlreadyMigrated is returned by ApplyInPlace when a sibling
+// .python-bak file already holds Go-schema data — a signal that this DB has
+// been migrated before and the rollback artifact has been overwritten. Pass
+// force=true (CLI: --force) to ignore the check.
+var ErrPythonBakAlreadyMigrated = errors.New("sibling .python-bak has Go schema — already migrated; pass --force to ignore")
 
 // PythonLedgerInfo describes a legacy database.
 type PythonLedgerInfo struct {
@@ -24,6 +31,7 @@ type ImportResult struct {
 	DestPath   string         `json:"dest_path"`
 	Tables     map[string]int `json:"tables"`
 	Skipped    []string       `json:"skipped_python_only"`
+	Archived   []ArchiveSpec  `json:"archived,omitempty"`
 }
 
 // pythonOnlyTables are legacy tables with no Go-native destination.
@@ -127,7 +135,12 @@ func ImportPythonDB(srcPath, dstPath string, replace bool) (ImportResult, error)
 }
 
 // ApplyInPlace migrates the project database from Python to Go schema atomically.
-func ApplyInPlace(dbPath string) (ImportResult, error) {
+// When noArchive is false (default), populated python-only tables are JSONL-archived
+// to <.devdb>/archive-python-only/ before the python DB is moved aside as
+// development.db.python-bak. Pass noArchive=true to skip the archive step.
+// When force is false (default), the function errors with ErrPythonBakAlreadyMigrated
+// if a sibling .python-bak already holds Go-schema data — pass force=true to ignore.
+func ApplyInPlace(dbPath string, noArchive, force bool) (ImportResult, error) {
 	abs, err := filepath.Abs(dbPath)
 	if err != nil {
 		return ImportResult{}, err
@@ -138,12 +151,34 @@ func ApplyInPlace(dbPath string) (ImportResult, error) {
 	dir := filepath.Dir(abs)
 	tmp := filepath.Join(dir, ".development.importing.db")
 	backup := filepath.Join(dir, "development.db.python-bak")
+	bakPath := abs + ".python-bak"
+	if !force {
+		if _, err := os.Stat(bakPath); err == nil {
+			if kind, _, err := detectFileSchema(bakPath); err == nil && kind == storage.SchemaGo {
+				return ImportResult{}, ErrPythonBakAlreadyMigrated
+			}
+		}
+	}
 	_ = os.Remove(tmp)
 
 	result, err := ImportPythonDB(abs, tmp, true)
 	if err != nil {
 		_ = os.Remove(tmp)
 		return ImportResult{}, err
+	}
+	if !noArchive {
+		srcDB, err := storage.Open(abs)
+		if err != nil {
+			return ImportResult{}, fmt.Errorf("open source for archive: %w", err)
+		}
+		archiveDir := filepath.Join(dir, "archive-python-only")
+		archived, err := ArchivePythonOnly(srcDB, archiveDir)
+		srcDB.Close()
+		if err != nil {
+			_ = os.Remove(tmp)
+			return ImportResult{}, fmt.Errorf("archive python-only: %w", err)
+		}
+		result.Archived = archived
 	}
 	_ = os.Remove(backup)
 	if err := os.Rename(abs, backup); err != nil {
@@ -195,23 +230,52 @@ func copySpecs() []copySpec {
 	return []copySpec{
 		{"goals", `INSERT OR REPLACE INTO goals (id, kind, title, body, status, created_at, model_id)
 			SELECT id, kind, title, body,
-				CASE status WHEN 'inactive' THEN 'wontfix' ELSE status END,
+				CASE WHEN status IN ('active','done','wontfix') THEN status
+				     WHEN status = 'inactive' THEN 'wontfix'
+				     WHEN status IS NULL OR status = '' THEN 'active'
+				     ELSE 'active' END,
 				created_at, model_id FROM legacy.goals`},
 		{"feedback", `INSERT OR REPLACE INTO feedback (id, role, category, severity, note, context, status, proposed_fix, created_at, model_id)
 			SELECT id, role, category, severity, note, context,
-				CASE status WHEN 'deferred' THEN 'closed' WHEN 'wontfix' THEN 'closed' ELSE status END,
+				CASE WHEN status = 'open' THEN 'open'
+				     WHEN status IN ('deferred','wontfix','resolved','closed') THEN 'closed'
+				     WHEN status IS NULL OR status = '' THEN 'open'
+				     ELSE 'closed' END,
 				proposed_fix, created_at, model_id FROM legacy.feedback`},
 		{"features", `INSERT OR REPLACE INTO features SELECT id, title, description, commit_sha, branch, created_at, model_id FROM legacy.features`},
 		{"plans", `INSERT OR REPLACE INTO plans SELECT id, slug, title, body, status, created_at, model_id FROM legacy.plans`},
-		{"milestones", `INSERT OR REPLACE INTO milestones SELECT id, plan_id, number, title, body, status, created_at, model_id FROM legacy.milestones`},
+		{"milestones", `INSERT OR REPLACE INTO milestones (id, plan_id, number, title, body, status, created_at, model_id)
+			SELECT id, plan_id, number, title, body,
+				CASE WHEN status IN ('planned','in_progress','done','wontfix') THEN status
+				     WHEN status IS NULL OR status = '' THEN 'planned'
+				     ELSE 'planned' END,
+				created_at, model_id FROM legacy.milestones`},
 		{"plan_items", `INSERT OR REPLACE INTO plan_items (id, plan_id, milestone_id, item_number, phase, step, title, body, source_doc, status, approval_status, created_at, model_id)
-			SELECT id, plan_id, milestone_id, item_number, phase, step, title, body, source_doc, status, approval_status, created_at, model_id FROM legacy.plan_items`},
-		{"plan_item_acceptance", `INSERT OR REPLACE INTO plan_item_acceptance SELECT id, plan_item_id, ordinal, criterion, status, evidence, created_at, updated_at, model_id FROM legacy.plan_item_acceptance`},
+			SELECT id, plan_id, milestone_id, item_number, phase, step, title, body, source_doc,
+				CASE WHEN status IN ('planned','in_progress','done','wontfix') THEN status
+				     WHEN status IS NULL OR status = '' THEN 'planned'
+				     ELSE 'planned' END,
+				approval_status, created_at, model_id FROM legacy.plan_items`},
+		{"plan_item_acceptance", `INSERT OR REPLACE INTO plan_item_acceptance (id, plan_item_id, ordinal, criterion, status, evidence, created_at, updated_at, model_id)
+			SELECT id, plan_item_id, ordinal, criterion,
+				CASE WHEN status IN ('open','met') THEN status
+				     WHEN status IS NULL OR status = '' THEN 'open'
+				     ELSE 'open' END,
+				evidence, created_at, updated_at, model_id FROM legacy.plan_item_acceptance`},
 		{"plan_item_files", `INSERT OR REPLACE INTO plan_item_files SELECT id, plan_item_id, path, role, created_at, model_id FROM legacy.plan_item_files`},
 		{"status_log", `INSERT OR REPLACE INTO status_log SELECT id, plan_item_id, status, note, created_at, model_id FROM legacy.status_log`},
-		{"tasks", `INSERT OR REPLACE INTO tasks SELECT id, title, body, status, priority, due_at, approval_status, created_at, model_id FROM legacy.tasks`},
+		{"tasks", `INSERT OR REPLACE INTO tasks (id, title, body, status, priority, due_at, approval_status, created_at, model_id)
+			SELECT id, title, body,
+				CASE WHEN status IN ('open','done','wontfix') THEN status
+				     WHEN status IS NULL OR status = '' THEN 'open'
+				     ELSE 'open' END,
+				priority, due_at, approval_status, created_at, model_id FROM legacy.tasks`},
 		{"reminders", `INSERT OR REPLACE INTO reminders (id, title, body, due_at, file_path, plan_item_id, status, snooze_until, created_at, model_id)
-			SELECT id, title, body, due_at, file_path, plan_item_id, status, snooze_until, created_at, model_id FROM legacy.reminders`},
+			SELECT id, title, body, due_at, file_path, plan_item_id,
+				CASE WHEN status IN ('open','dismissed') THEN status
+				     WHEN status IS NULL OR status = '' THEN 'open'
+				     ELSE 'open' END,
+				snooze_until, created_at, model_id FROM legacy.reminders`},
 		{"approval_log", `INSERT OR REPLACE INTO approval_log SELECT id, entity_table, entity_id, action, note, created_at, model_id FROM legacy.approval_log`},
 		{"scan_runs", `INSERT OR REPLACE INTO scan_runs SELECT id, started_at, finished_at, git_sha, files_seen, files_added, files_changed, files_removed, model_id FROM legacy.scan_runs`},
 		{"repo_files", `INSERT OR REPLACE INTO repo_files SELECT path, language, kind, lines, content_hash, size_bytes, last_seen_at, last_scan_run_id FROM legacy.repo_files`},

@@ -46,7 +46,7 @@ func TestApplyInPlaceOnPythonDB(t *testing.T) {
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := importer.ApplyInPlace(tmp); err != nil {
+	if _, err := importer.ApplyInPlace(tmp, false, false); err != nil {
 		t.Logf("apply: %v", err)
 	}
 }
