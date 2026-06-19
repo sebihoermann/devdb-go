@@ -10,13 +10,16 @@ import (
 )
 
 func TestApplyInPlaceImportFailureOnReadOnlyDir(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("chmod-as-user semantics don't apply under root")
+	}
 	dir := t.TempDir()
 	dbPath := createMinimalPythonDB(t, dir, "development.db")
 	if err := os.Chmod(dir, 0o555); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
-	_, err := importer.ApplyInPlace(dbPath)
+	_, err := importer.ApplyInPlace(dbPath, true, false)
 	if err == nil {
 		t.Fatal("expected import failure on read-only directory")
 	}
@@ -49,7 +52,7 @@ func TestApplyInPlaceBackupRenameFailure(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(backup, "blocker"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := importer.ApplyInPlace(dbPath)
+	_, err := importer.ApplyInPlace(dbPath, true, false)
 	if err == nil {
 		t.Fatal("expected backup rename failure when backup path is a directory")
 	}

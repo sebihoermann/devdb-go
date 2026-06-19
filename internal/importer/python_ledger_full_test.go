@@ -84,6 +84,12 @@ func createFullPythonDB(t *testing.T, dir, name string) string {
 			VALUES ('m1', 'p1', 1, 'M1', 'planned', '` + ts + `', 'test')`,
 		`INSERT INTO plan_item_acceptance(id, plan_item_id, ordinal, criterion, status, created_at, updated_at, model_id)
 			VALUES ('acc1', 'pi1', 1, 'done', 'met', '` + ts + `', '` + ts + `', 'test')`,
+		`INSERT INTO feedback(id, role, note, status, created_at, model_id)
+			VALUES ('fb_resolved', 'model', 'resolved-row', 'resolved', '` + ts + `', 'test')`,
+		`INSERT INTO feedback(id, role, note, status, created_at, model_id)
+			VALUES ('fb_deferred', 'model', 'deferred-row', 'deferred', '` + ts + `', 'test')`,
+		`INSERT INTO plan_item_acceptance(id, plan_item_id, ordinal, criterion, status, evidence, created_at, updated_at, model_id)
+			VALUES ('acc_wontfix', 'pi1', 2, 'criterion', 'wontfix', 'note', '` + ts + `', '` + ts + `', 'test')`,
 		`INSERT INTO plan_item_files(id, plan_item_id, path, role, created_at, model_id)
 			VALUES ('pf1', 'pi1', 'main.go', 'modify', '` + ts + `', 'test')`,
 		`INSERT INTO status_log(id, plan_item_id, status, note, created_at, model_id)
@@ -129,7 +135,7 @@ func TestImportFullLegacyFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, table := range []string{
-		"features", "milestones", "plan_item_acceptance", "plan_item_files", "status_log",
+		"features", "milestones", "plan_item_files", "status_log",
 		"tasks", "reminders", "approval_log", "scan_runs", "file_change_events",
 		"architecture_notes", "review_runs", "review_findings", "verification_inputs",
 		"verification_failures", "missed_cli_calls", "sync_state", "commit_archeology",
@@ -137,5 +143,11 @@ func TestImportFullLegacyFixture(t *testing.T) {
 		if result.Tables[table] != 1 {
 			t.Fatalf("table %s rows=%d", table, result.Tables[table])
 		}
+	}
+	if result.Tables["plan_item_acceptance"] != 2 {
+		t.Fatalf("plan_item_acceptance rows=%d want 2", result.Tables["plan_item_acceptance"])
+	}
+	if result.Tables["feedback"] != 5 {
+		t.Fatalf("feedback rows=%d want 5", result.Tables["feedback"])
 	}
 }

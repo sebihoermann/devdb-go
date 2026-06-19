@@ -658,6 +658,9 @@ func TestDoctorFilterByRootPath(t *testing.T) {
 }
 
 func TestOpenHubRunHubFailureOnReadonlyFile(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("chmod-as-user semantics don't apply under root")
+	}
 	dir := t.TempDir()
 	meta := filepath.Join(dir, "meta.db")
 	if err := os.WriteFile(meta, []byte{0}, 0o444); err != nil {

@@ -233,6 +233,9 @@ func TestOpenInvalidSQLiteFile(t *testing.T) {
 }
 
 func TestInitDBMkdirFailure(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("chmod-as-user semantics don't apply under root")
+	}
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, ".devdb", "development.db")
 	ctx, err := app.Open(dir, dbPath, false)
@@ -317,6 +320,9 @@ func TestOpenDefaultModelID(t *testing.T) {
 }
 
 func TestOpenStatPermissionError(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("chmod-as-user semantics don't apply under root")
+	}
 	dir := t.TempDir()
 	locked := filepath.Join(dir, "locked")
 	if err := os.Mkdir(locked, 0o000); err != nil {

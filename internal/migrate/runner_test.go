@@ -212,6 +212,9 @@ func TestRunHubScanErrorOnSchemaMigrations(t *testing.T) {
 }
 
 func TestRunAllFailsOnReadonlyDatabase(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("chmod-as-user semantics don't apply under root")
+	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "development.db")
 	db, err := storage.Open(path)

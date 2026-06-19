@@ -18,6 +18,9 @@ func TestCopyLegacyDataClosedDB(t *testing.T) {
 }
 
 func TestImportPythonDBMkdirFailure(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("chmod-as-user semantics don't apply under root")
+	}
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src.db")
 	if err := writeMinimalPythonDBWithFeedback(src); err != nil {

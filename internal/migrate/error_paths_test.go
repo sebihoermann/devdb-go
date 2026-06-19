@@ -88,6 +88,9 @@ func TestRunAllRowsErrPath(t *testing.T) {
 }
 
 func TestRunHubCommitFailure(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("chmod-as-user semantics don't apply under root")
+	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "hub.db")
 	db, err := storage.Open(path)

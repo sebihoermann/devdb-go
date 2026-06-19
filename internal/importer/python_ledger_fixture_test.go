@@ -53,6 +53,8 @@ func createMinimalPythonDB(t *testing.T, dir, name string) string {
 			VALUES ('fb1', 'model', 'legacy note', 'deferred', '2020-01-01T00:00:00Z', 'test')`,
 		`INSERT INTO feedback(id, role, note, status, created_at, model_id)
 			VALUES ('fb2', 'model', 'wontfix note', 'wontfix', '2020-01-01T00:00:00Z', 'test')`,
+		`INSERT INTO feedback(id, role, note, status, created_at, model_id)
+			VALUES ('fb3', 'model', 'resolved note', 'resolved', '2020-01-01T00:00:00Z', 'test')`,
 		`INSERT INTO plans(id, slug, title, status, created_at, model_id)
 			VALUES ('p1', 'plan-a', 'Plan A', 'active', '2020-01-01T00:00:00Z', 'test')`,
 		`INSERT INTO plan_items(id, plan_id, title, status, created_at, model_id)
@@ -80,7 +82,7 @@ func TestImportPythonDBFromFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Tables["feedback"] != 2 || result.Tables["goals"] != 1 || result.Tables["plan_items"] != 1 {
+	if result.Tables["feedback"] != 3 || result.Tables["goals"] != 1 || result.Tables["plan_items"] != 1 {
 		t.Fatalf("copy counts: %+v", result.Tables)
 	}
 	if len(result.Skipped) == 0 {
@@ -110,7 +112,7 @@ func TestApplyInPlace(t *testing.T) {
 	dir := t.TempDir()
 	srcPath := createMinimalPythonDB(t, dir, "development.db")
 
-	result, err := importer.ApplyInPlace(srcPath)
+	result, err := importer.ApplyInPlace(srcPath, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +137,7 @@ func TestApplyInPlace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Feedback != 2 || got.Goals != 1 || got.PlanItems != 1 || got.Plans != 1 {
+	if got.Feedback != 3 || got.Goals != 1 || got.PlanItems != 1 || got.Plans != 1 {
 		t.Fatalf("parity after apply: %+v", got)
 	}
 }
@@ -259,7 +261,7 @@ func TestImportReplacePopulatedGoDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Tables["feedback"] != 2 {
+	if result.Tables["feedback"] != 3 {
 		t.Fatalf("replace import: %+v", result.Tables)
 	}
 }
@@ -293,7 +295,7 @@ func TestApplyInPlaceRejectsNonPython(t *testing.T) {
 		t.Fatal(err)
 	}
 	db.Close()
-	if _, err := importer.ApplyInPlace(path); err == nil {
+	if _, err := importer.ApplyInPlace(path, false, false); err == nil {
 		t.Fatal("expected apply error for go schema")
 	}
 }
@@ -309,7 +311,7 @@ func TestCountParityAllTables(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Feedback != 2 || got.Plans != 1 || got.RepoFiles != 1 || got.VerifyRuns != 1 || got.Archive != 1 {
+	if got.Feedback != 3 || got.Plans != 1 || got.RepoFiles != 1 || got.VerifyRuns != 1 || got.Archive != 1 {
 		t.Fatalf("full parity: %+v", got)
 	}
 }
@@ -331,8 +333,8 @@ func TestImportIntoEmptyGoDatabaseFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Tables["feedback"] != 2 {
-		t.Fatalf("feedback rows=%d want 2", result.Tables["feedback"])
+	if result.Tables["feedback"] != 3 {
+		t.Fatalf("feedback rows=%d want 3", result.Tables["feedback"])
 	}
 	dstDB, err := storage.Open(dst)
 	if err != nil {
@@ -340,7 +342,7 @@ func TestImportIntoEmptyGoDatabaseFile(t *testing.T) {
 	}
 	defer dstDB.Close()
 	var closed int
-	if err := dstDB.QueryRow(`SELECT COUNT(*) FROM feedback WHERE status='closed'`).Scan(&closed); err != nil || closed != 2 {
+	if err := dstDB.QueryRow(`SELECT COUNT(*) FROM feedback WHERE status='closed'`).Scan(&closed); err != nil || closed != 3 {
 		t.Fatalf("mapped closed feedback: %d err=%v", closed, err)
 	}
 }
