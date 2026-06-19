@@ -28,6 +28,7 @@ func cmdHub(openCtx opener) *cobra.Command {
 		cmdHubProject(openCtx),
 		cmdHubDoctor(openCtx),
 		cmdHubAcross(openCtx),
+		cmdHubAudit(openCtx),
 	)
 	return h
 }
@@ -378,4 +379,166 @@ func cmdHubAcross(openCtx opener) *cobra.Command {
 	c.Flags().StringVar(&keyword, "keyword", "", "filter for similar-feedback")
 	c.Flags().StringVar(&category, "category", "", "filter for similar-feedback")
 	return c
+}
+
+func cmdHubAudit(openCtx opener) *cobra.Command {
+	var severity, kindsRaw, projectsRaw string
+	var cached, includeArchived bool
+	c := &cobra.Command{
+		Use:   "audit",
+		Short: "Cross-project open issues + plans snapshot",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx, err := openCtx(cmd)
+			if err != nil {
+				return err
+			}
+			defer ctx.Close()
+			mode := "live"
+			if cached {
+				mode = "cached"
+			}
+			kinds := splitCSV(kindsRaw)
+			projects := splitCSV(projectsRaw)
+			report, err := hub.Audit(hub.AuditOptions{
+				Severity:        severity,
+				Kinds:           kinds,
+				Projects:        projects,
+				Mode:            mode,
+				IncludeArchived: includeArchived,
+				Registry:        flagRegistry,
+				MetadataDB:      flagMetadataDB,
+			})
+			if err != nil {
+				return &CLIError{Code: ExitInvalidValue, Message: err.Error(), Kind: "invalid_argument"}
+			}
+			if ctx.Out.JSON {
+				return ctx.Out.PrintData(report)
+			}
+			lines := formatAudit(report)
+			return ctx.Out.PrintData(output.HumanLines{Lines: lines})
+		},
+	}
+	c.Flags().StringVar(&severity, "severity", "", "floor for high_feedback/high_findings (info|low|med|medium|high|critical; default high)")
+	c.Flags().StringVar(&kindsRaw, "kind", "", "comma-separated section subset: feedback,findings,stale_arch,overdue,in_progress,blocked,planned,verification")
+	c.Flags().StringVar(&projectsRaw, "project", "", "comma-separated alias filter; repeat to add more")
+	c.Flags().BoolVar(&cached, "cached", false, "read from ~/.devdb/metadata.db snapshot instead of live federation read")
+	c.Flags().BoolVar(&includeArchived, "include-archived", false, "include archived feedback rows in high_feedback")
+	return c
+}
+
+func splitCSV(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := parts[:0]
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func formatAudit(report hub.AuditReport) []string {
+	lines := []string{
+		fmt.Sprintf("# audit · %s · %s · threshold=%s",
+			report.CollectedAt, report.Mode, report.SeverityThreshold),
+		"",
+	}
+	for _, kind := range hub.AuditSectionOrder() {
+		sec := report.Sections[kind]
+		title := auditSectionTitle(kind)
+		lines = append(lines, fmt.Sprintf("%s (%d)", title, len(sec.Rows)))
+		if len(sec.Rows) == 0 {
+			lines = append(lines, "  (none)")
+			lines = append(lines, "")
+			continue
+		}
+		for _, row := range sec.Rows {
+			lines = append(lines, "  "+formatAuditRow(kind, row))
+		}
+		lines = append(lines, "")
+	}
+	return lines
+}
+
+func auditSectionTitle(kind string) string {
+	switch kind {
+	case "high_feedback":
+		return "high feedback"
+	case "high_findings":
+		return "high review findings"
+	case "stale_arch":
+		return "stale architecture notes"
+	case "overdue_reminders":
+		return "overdue reminders"
+	case "in_progress":
+		return "in-progress plan items"
+	case "blocked":
+		return "blocked"
+	case "planned_per_project":
+		return "planned per project"
+	case "stale_verification":
+		return "stale verification"
+	default:
+		return kind
+	}
+}
+
+func formatAuditRow(kind string, row map[string]any) string {
+	project, _ := row["project"].(string)
+	switch kind {
+	case "high_feedback":
+		sev, _ := row["severity"].(string)
+		cat, _ := row["category"].(string)
+		note, _ := row["note"].(string)
+		prefix, _ := row["id_prefix"].(string)
+		catPart := ""
+		if cat != "" {
+			catPart = " (" + cat + ")"
+		}
+		return fmt.Sprintf("%s  [%s]%s %s  [%s]", project, sev, catPart, note, prefix)
+	case "high_findings":
+		sev, _ := row["severity"].(string)
+		title, _ := row["title"].(string)
+		file, _ := row["file_path"].(string)
+		prefix, _ := row["id_prefix"].(string)
+		filePart := ""
+		if file != "" {
+			filePart = " @ " + file
+		}
+		return fmt.Sprintf("%s  [%s] %s%s  [%s]", project, sev, title, filePart, prefix)
+	case "stale_arch":
+		topic, _ := row["topic"].(string)
+		prefix, _ := row["id_prefix"].(string)
+		return fmt.Sprintf("%s · %s  [%s]", project, topic, prefix)
+	case "overdue_reminders":
+		title, _ := row["title"].(string)
+		due, _ := row["due_at"].(string)
+		return fmt.Sprintf("%s  due=%s  %s", project, due, title)
+	case "in_progress":
+		title, _ := row["title"].(string)
+		prefix, _ := row["id_prefix"].(string)
+		return fmt.Sprintf("%s  %s  [%s]", project, title, prefix)
+	case "blocked":
+		title, _ := row["title"].(string)
+		note, _ := row["note"].(string)
+		prefix, _ := row["id_prefix"].(string)
+		return fmt.Sprintf("%s  %s — %s  [%s]", project, title, note, prefix)
+	case "planned_per_project":
+		count := row["count"]
+		next, _ := row["next"].(string)
+		nextID, _ := row["next_id_prefix"].(string)
+		if next != "" {
+			return fmt.Sprintf("%s  N=%v  next=%q  [%s]", project, count, next, nextID)
+		}
+		return fmt.Sprintf("%s  N=%v", project, count)
+	case "stale_verification":
+		cmd, _ := row["command"].(string)
+		reason, _ := row["reason"].(string)
+		return fmt.Sprintf("%s  %s  (%s)", project, cmd, reason)
+	}
+	return fmt.Sprintf("%s  %v", project, row)
 }

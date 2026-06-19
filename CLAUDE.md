@@ -29,4 +29,6 @@ Migrate a legacy Python ledger: `devdb import python-db --apply`
 
 Before any task, run `devdb report`. Bracket work with `devdb plan item start` and `devdb plan item pause`.
 
+For the cross-project read in a multi-repo session, use `devdb hub audit` (one command replaces 30+ manual reads).
+
 Read the agent playbook: **[skills/devdb/SKILL.md](skills/devdb/SKILL.md)**

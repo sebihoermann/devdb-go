@@ -364,7 +364,15 @@ devdb hub project <alias_or_path> [--json]
 devdb hub doctor [--json]
 devdb hub across similar-feedback --keyword "import error"
 devdb hub across open-debt
+devdb hub audit [--severity <level>] [--kind <list>] [--project <alias>] [--cached] [--include-archived]
 ```
+
+`hub audit` is the one-command cross-project session-start read: live
+federation read by default (parity with `hub across`), `--cached` for
+hub-snapshot parity. Eight sections: high feedback, high review
+findings, stale arch notes, overdue reminders, in-progress plan items,
+blocked, planned per project, stale verification. Replaces 30+ manual
+commands.
 
 Federation queries (`hub across`) attach each project's `development.db` directly — they do not read copied hub rows.
 
@@ -372,6 +380,7 @@ Federation queries (`hub across`) attach each project's `development.db` directl
 
 - `devdb report` — whole-project overview (use `--all` for more feedback rows).
 - `devdb status --json` — one-line delivery snapshot.
+- `devdb hub audit` — one-command cross-project open issues + plans snapshot. The session-start cross-project read.
 - `devdb inventory context --files PATH ...` — arch notes, findings, reminders for files you will touch; `--strict` exits non-zero on stale notes or high findings.
 - `devdb inventory diff --since <git-ref>` — changes since ref and related notes/findings.
 - `devdb list <table>` / `devdb show <table> <id>` — raw enumeration when you need it.

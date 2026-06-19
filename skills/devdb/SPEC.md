@@ -956,6 +956,53 @@ Hand-curated cross-project pointers. No similarity scoring. No embeddings. No in
 - [ ] `project_links` rows can be inserted and queried from either side
 - [ ] No changes to existing per-project schema beyond adding `project_links`
 
+### M7.1 — `hub audit`: one-command cross-project session-start read
+
+**Goal.** Replace the per-project session-start ritual with a single
+verb that produces a unified cross-project open-issues-and-plans
+snapshot. Designed alongside `devdb-go · hub-audit` plan (see
+`docs/hub-audit-design.md`).
+
+**Verb:** `devdb hub audit [--severity <lvl>] [--kind <list>] [--project <alias>] [--cached] [--include-archived] [--json]`
+
+**Sections (canonical order):** `high_feedback`, `high_findings`,
+`stale_arch`, `overdue_reminders`, `in_progress`, `blocked`,
+`planned_per_project`, `stale_verification`.
+
+**Modes:** live (default — opens each project's `.devdb/development.db`
+directly, skipping corrupt / missing / legacy-Python databases with
+parity to `hub across`); `--cached` reads from `~/.devdb/metadata.db`
+project_snapshots (parity to `hub dashboard`).
+
+**Kind aliases:** `--kind feedback,findings,stale_arch,overdue,in_progress,blocked,planned,verification`
+shorten the canonical names.
+
+**Output shape (JSON):**
+```json
+{
+  "collected_at": "2026-06-19T21:30:00Z",
+  "registry": "/root/.devdb-projects",
+  "mode": "live",
+  "severity_threshold": "high",
+  "sections": { "high_feedback": {"kind":"high_feedback","rows":[...]}, ... },
+  "by_project": { "workspace": {"open_high_feedback":0,"open_plan_items":26,...} }
+}
+```
+
+**Acceptance checklist.**
+- [ ] `devdb hub audit --help` short-help is exactly one line
+- [ ] `devdb hub audit` returns 8 sections even when all are empty
+- [ ] Empty `~/.devdb-projects` → empty report, exit 0
+- [ ] Corrupt `.devdb/development.db` skipped silently
+- [ ] Missing `.devdb/development.db` skipped silently
+- [ ] Legacy Python schema skipped silently
+- [ ] `--project <alias>` filters the registry walk
+- [ ] `--severity high` vs `--severity medium` widen the row count for `high_feedback` / `high_findings`
+- [ ] `--kind feedback` returns only the high_feedback section (others empty)
+- [ ] `--cached` returns counts via `by_project` (row-level data is empty in cached mode)
+- [ ] All existing tests still pass
+- [ ] No schema change
+
 ## Invariants (must hold at every milestone boundary)
 
 1. `pytest -q` green. Existing 26 tests + everything added so far.
