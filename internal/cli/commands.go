@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -91,6 +92,7 @@ func newRoot() *cobra.Command {
 		SilenceErrors: true,
 	}
 	root.PersistentFlags().StringVar(&flagRepo, "repo", "", "repository root (default: auto-detect)")
+	root.PersistentFlags().StringVar(&flagRepo, "repo-root", "", "alias for --repo (deprecated; for legacy muscle memory)")
 	root.PersistentFlags().StringVar(&flagDB, "db", "", "database path (default: .devdb/development.db)")
 	root.PersistentFlags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
 	root.PersistentFlags().BoolVar(&flagAll, "all", false, "expand list limits on read commands")
@@ -820,7 +822,7 @@ func cmdPlanAcceptanceMeet(open opener) *cobra.Command {
 
 func cmdImport(open opener) *cobra.Command {
 	var outputPath string
-	var apply, replace bool
+	var apply, replace, noArchive, force bool
 	c := &cobra.Command{
 		Use:   "python-db [PATH]",
 		Short: "Inspect or import a legacy Python database",
@@ -835,11 +837,18 @@ func cmdImport(open opener) *cobra.Command {
 				path = args[0]
 			}
 			if apply {
-				result, err := importer.ApplyInPlace(path)
+				result, err := importer.ApplyInPlace(path, noArchive, force)
 				if err != nil {
+					if errors.Is(err, importer.ErrPythonBakAlreadyMigrated) {
+						return fmt.Errorf("%w — sibling %s.python-bak has Go schema", err, path)
+					}
 					return err
 				}
-				ctx.Out.Hint("imported legacy database in place · backup at .devdb/development.db.python-bak")
+				if noArchive {
+					ctx.Out.Hint("imported legacy database in place · backup at .devdb/development.db.python-bak (auto-archive skipped)")
+				} else {
+					ctx.Out.Hint("imported legacy database in place · backup at .devdb/development.db.python-bak · python-only rows archived to .devdb/archive-python-only/")
+				}
 				return ctx.Out.PrintData(result)
 			}
 			if outputPath != "" {
@@ -861,6 +870,8 @@ func cmdImport(open opener) *cobra.Command {
 	c.Flags().StringVarP(&outputPath, "output", "o", "", "write imported Go-native database to PATH")
 	c.Flags().BoolVar(&apply, "apply", false, "migrate PATH in place (backs up to development.db.python-bak)")
 	c.Flags().BoolVar(&replace, "replace", false, "overwrite non-empty destination when using --output")
+	c.Flags().BoolVar(&noArchive, "no-archive-python-only", false, "with --apply, skip auto-archiving python-only tables to .devdb/archive-python-only/")
+	c.Flags().BoolVar(&force, "force", false, "with --apply, ignore the .python-bak-already-migrated guard")
 	importCmd := &cobra.Command{Use: "import", Short: "One-time data import"}
 	importCmd.AddCommand(c)
 	return importCmd
