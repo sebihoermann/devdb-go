@@ -548,8 +548,8 @@ func TestInProcessReadVerboseAndHelp(t *testing.T) {
 	}
 
 	helpInitOut := runCLIOut(t, "help", "init")
-	if !strings.Contains(helpInitOut, "help [command]") {
-		t.Fatalf("help init: %q", helpInitOut)
+	if !strings.Contains(helpInitOut, "Initialize .devdb/development.db") {
+		t.Fatalf("help init should dispatch to init's help: %q", helpInitOut)
 	}
 }
 

@@ -224,3 +224,34 @@ func TestPlanAddAcceptsSlugOrID(t *testing.T) {
 	// Item add with uuid must still work (no regression).
 	runCLIOut(t, "--db", dbPath, "plan", "item", "add", "Item-uuid", "--plan", planID)
 }
+
+// TestHelpDispatchesToSubcommand is a regression for feedback d97f61ce:
+// 'devdb help <subcommand>' must dispatch to that subcommand's help text,
+// not print global help unconditionally.
+func TestHelpDispatchesToSubcommand(t *testing.T) {
+	global := runCLIOut(t, "help")
+	if !strings.Contains(global, "Available Commands") {
+		t.Fatalf("global help missing command list: %q", global)
+	}
+
+	planHelp := runCLIOut(t, "help", "plan")
+	if !strings.Contains(planHelp, "devdb plan [command]") {
+		t.Fatalf("help plan should dispatch to plan's help: %q", planHelp)
+	}
+
+	hubAuditHelp := runCLIOut(t, "help", "hub", "audit")
+	if !strings.Contains(hubAuditHelp, "devdb hub audit [flags]") {
+		t.Fatalf("help hub audit should dispatch to hub audit's help: %q", hubAuditHelp)
+	}
+
+	bogusStdout, bogusStderr, bogusCode := runCLI(t, "help", "bogus")
+	if bogusCode != 0 {
+		t.Fatalf("help bogus must not crash; exit=%d stderr=%s", bogusCode, bogusStderr)
+	}
+	if !strings.Contains(bogusStderr, "unknown command") {
+		t.Fatalf("help bogus should report unknown command on stderr: %q", bogusStderr)
+	}
+	if !strings.Contains(bogusStdout, "Available Commands") {
+		t.Fatalf("help bogus should fall back to global help: %q", bogusStdout)
+	}
+}

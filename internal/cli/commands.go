@@ -887,10 +887,22 @@ func cmdImport(open opener) *cobra.Command {
 func cmdHelp() *cobra.Command {
 	return &cobra.Command{
 		Use:   "help [command]",
-		Short: "Show help",
+		Short: "Show help for a command (no arg = global help)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_ = cmd.Help()
-			return nil
+			root := cmd.Root()
+			if len(args) == 0 {
+				return root.Help()
+			}
+			target, _, err := root.Find(args)
+			if err != nil || target == root {
+				fmt.Fprintf(cmd.ErrOrStderr(), "unknown command %q\n", strings.Join(args, " "))
+				return root.Help()
+			}
+			if target.Hidden || target.Name() == "help" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "unknown command %q\n", strings.Join(args, " "))
+				return root.Help()
+			}
+			return target.Help()
 		},
 	}
 }
