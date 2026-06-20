@@ -240,3 +240,30 @@ func TestScanRemovesDeletedFiles(t *testing.T) {
 		t.Fatalf("second scan: %+v err=%v", res, err)
 	}
 }
+
+// TestScanWithNullLanguageAndContentHash is a regression for feedback 2267452b:
+// existing repo_files rows with NULL language or NULL content_hash must not
+// crash Scan with "converting NULL to string is unsupported".
+func TestScanWithNullLanguageAndContentHash(t *testing.T) {
+	db, _ := testutil.TempDB(t)
+	repo := t.TempDir()
+
+	src := filepath.Join(repo, "pkg", "main.go")
+	if err := os.MkdirAll(filepath.Dir(src), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(src, []byte("package main\n\nfunc main() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := inventory.Scan(db, repo, nil, false, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(
+		`UPDATE repo_files SET language=NULL, content_hash=NULL WHERE path='pkg/main.go'`,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := inventory.Scan(db, repo, nil, false, "test"); err != nil {
+		t.Fatalf("scan with NULL language/content_hash must not fail: %v", err)
+	}
+}

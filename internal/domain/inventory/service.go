@@ -13,17 +13,18 @@ import (
 
 // ScanResult summarizes a scan run.
 type ScanResult struct {
-	RunID         string `json:"run_id"`
-	FilesSeen     int    `json:"files_seen"`
-	FilesAdded    int    `json:"files_added"`
-	FilesChanged  int    `json:"files_changed"`
-	FilesRemoved  int    `json:"files_removed"`
-	GitSHA        string `json:"git_sha,omitempty"`
+	RunID        string `json:"run_id"`
+	FilesSeen    int    `json:"files_seen"`
+	FilesAdded   int    `json:"files_added"`
+	FilesChanged int    `json:"files_changed"`
+	FilesRemoved int    `json:"files_removed"`
+	GitSHA       string `json:"git_sha,omitempty"`
 }
 
 type existingFile struct {
-	path, language, kind, contentHash string
-	lines, sizeBytes                  sql.NullInt64
+	path, kind            string
+	language, contentHash sql.NullString
+	lines, sizeBytes      sql.NullInt64
 }
 
 // Scan updates repo_files and records scan_runs + file_change_events.
@@ -97,11 +98,19 @@ func Scan(db *sql.DB, repoRoot string, paths []string, gitAware bool, modelID st
 			if prev.sizeBytes.Valid {
 				prevSize = prev.sizeBytes.Int64
 			}
-			changedFields := prev.language != rec.Language || prev.kind != rec.Kind ||
-				prevLines != recLines || prev.contentHash != rec.ContentHash || prevSize != int64(rec.SizeBytes)
+			prevLang := ""
+			if prev.language.Valid {
+				prevLang = prev.language.String
+			}
+			prevHash := ""
+			if prev.contentHash.Valid {
+				prevHash = prev.contentHash.String
+			}
+			changedFields := prevLang != rec.Language || prev.kind != rec.Kind ||
+				prevLines != recLines || prevHash != rec.ContentHash || prevSize != int64(rec.SizeBytes)
 			if changedFields {
 				changed++
-				events = append(events, changeEvent{"modified", rec.Path, prev.contentHash, rec.ContentHash})
+				events = append(events, changeEvent{"modified", rec.Path, prevHash, rec.ContentHash})
 			}
 			_, err = db.Exec(`
 				UPDATE repo_files SET language=?, kind=?, lines=?, content_hash=?, size_bytes=?, last_seen_at=?, last_scan_run_id=?
@@ -120,7 +129,11 @@ func Scan(db *sql.DB, repoRoot string, paths []string, gitAware bool, modelID st
 			continue
 		}
 		if pathInScope(path, scope) {
-			events = append(events, changeEvent{"removed", path, row.contentHash, ""})
+			removedHash := ""
+			if row.contentHash.Valid {
+				removedHash = row.contentHash.String
+			}
+			events = append(events, changeEvent{"removed", path, removedHash, ""})
 		}
 		if len(paths) > 0 && !pathInScope(path, scope) {
 			continue
@@ -163,10 +176,10 @@ func Scan(db *sql.DB, repoRoot string, paths []string, gitAware bool, modelID st
 
 // LocSummary aggregates line counts from a scan (not persisted).
 type LocSummary struct {
-	Files       int            `json:"files"`
-	TotalLines  int            `json:"total_lines"`
-	ByKind      map[string]int `json:"by_kind"`
-	ByLanguage  map[string]int `json:"by_language"`
+	Files      int            `json:"files"`
+	TotalLines int            `json:"total_lines"`
+	ByKind     map[string]int `json:"by_kind"`
+	ByLanguage map[string]int `json:"by_language"`
 }
 
 // Loc scans files and returns line-count aggregates.
@@ -233,14 +246,14 @@ func FreshnessInfo(db *sql.DB) (Freshness, error) {
 
 // ContextPayload is focused pre-edit context.
 type ContextPayload struct {
-	Task              string                      `json:"task,omitempty"`
-	Files             []string                    `json:"files"`
-	PlanItemID        string                      `json:"plan_item_id,omitempty"`
-	StaleNotes        []architecture.Note         `json:"stale_notes"`
-	ArchitectureNotes []architecture.Note         `json:"architecture_notes"`
-	OpenFindings      []FindingSummary            `json:"open_findings"`
-	FileReminders     []reminders.Row             `json:"file_reminders"`
-	PlanReminders     []reminders.Row             `json:"plan_reminders"`
+	Task              string              `json:"task,omitempty"`
+	Files             []string            `json:"files"`
+	PlanItemID        string              `json:"plan_item_id,omitempty"`
+	StaleNotes        []architecture.Note `json:"stale_notes"`
+	ArchitectureNotes []architecture.Note `json:"architecture_notes"`
+	OpenFindings      []FindingSummary    `json:"open_findings"`
+	FileReminders     []reminders.Row     `json:"file_reminders"`
+	PlanReminders     []reminders.Row     `json:"plan_reminders"`
 }
 
 // FindingSummary is a compact review finding row (M6 fills this; empty until then).
