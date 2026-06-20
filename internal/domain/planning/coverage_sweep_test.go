@@ -1,6 +1,7 @@
 package planning
 
 import (
+	"database/sql"
 	"os"
 	"path/filepath"
 	"strings"
@@ -96,6 +97,56 @@ func TestCloseItemWithEvidenceAndMeetAcceptance(t *testing.T) {
 	if err != nil || closed != itemID {
 		t.Fatalf("close=%q err=%v", closed, err)
 	}
+}
+
+// TestCloseItemAutoCompletesMilestone verifies that closing the last open
+// item in a milestone flips the milestone to 'done' automatically.
+func TestCloseItemAutoCompletesMilestone(t *testing.T) {
+	db, _ := testutil.TempDB(t)
+	planID, _ := CreatePlan(db, CreatePlanInput{Slug: "rollup", Title: "Rollup", ModelID: "test"})
+	msID, _ := AddMilestone(db, planID, "M1", "", "test", 1)
+
+	// Item 1: close it. Milestone should still have an open sibling.
+	item1, _ := AddStructuredItem(db, StructuredItemInput{PlanID: planID, MilestoneID: msID, Title: "A", ModelID: "test"})
+	acc1, _ := AddAcceptance(db, item1, "a", "test", 0)
+	_, _ = MeetAcceptance(db, acc1, "x", "test")
+
+	// Add item 2 BEFORE closing item 1 so the milestone still has an open item.
+	item2, _ := AddStructuredItem(db, StructuredItemInput{PlanID: planID, MilestoneID: msID, Title: "B", ModelID: "test"})
+	acc2, _ := AddAcceptance(db, item2, "b", "test", 0)
+	_, _ = MeetAcceptance(db, acc2, "x", "test")
+
+	if _, err := CloseItem(db, item1, "ship", "test"); err != nil {
+		t.Fatal(err)
+	}
+	if status := getMilestoneStatus(t, db, msID); status != "planned" {
+		t.Fatalf("milestone should stay planned while sibling items remain; got %q", status)
+	}
+
+	// Closing item 2 should auto-rollup the milestone to done.
+	if _, err := CloseItem(db, item2, "ship", "test"); err != nil {
+		t.Fatal(err)
+	}
+	if status := getMilestoneStatus(t, db, msID); status != "done" {
+		t.Fatalf("milestone should auto-rollup to done after last item closes; got %q", status)
+	}
+
+	// Closing an item without a milestone must not crash.
+	orphan, _ := AddItem(db, AddItemInput{PlanID: planID, Title: "Orphan", ModelID: "test"})
+	acc3, _ := AddAcceptance(db, orphan, "o", "test", 0)
+	_, _ = MeetAcceptance(db, acc3, "x", "test")
+	if _, err := CloseItem(db, orphan, "ship", "test"); err != nil {
+		t.Fatalf("closing item without milestone should not fail: %v", err)
+	}
+}
+
+func getMilestoneStatus(t *testing.T, db *sql.DB, id string) string {
+	t.Helper()
+	var status string
+	if err := db.QueryRow(`SELECT status FROM milestones WHERE id=?`, id).Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	return status
 }
 
 func TestSyncPlanStatusDirect(t *testing.T) {

@@ -20,26 +20,26 @@ type Plan struct {
 
 // PlanItem is a unit of work.
 type PlanItem struct {
-	ID           string `json:"id"`
-	PlanID       string `json:"plan_id,omitempty"`
-	MilestoneID  string `json:"milestone_id,omitempty"`
-	ItemNumber   int    `json:"item_number,omitempty"`
-	Title        string `json:"title"`
-	Body         string `json:"body,omitempty"`
-	Status       string `json:"status"`
-	Approval     string `json:"approval_status"`
-	CreatedAt    string `json:"created_at"`
-	Phase        string `json:"phase,omitempty"`
-	Step         string `json:"step,omitempty"`
+	ID          string `json:"id"`
+	PlanID      string `json:"plan_id,omitempty"`
+	MilestoneID string `json:"milestone_id,omitempty"`
+	ItemNumber  int    `json:"item_number,omitempty"`
+	Title       string `json:"title"`
+	Body        string `json:"body,omitempty"`
+	Status      string `json:"status"`
+	Approval    string `json:"approval_status"`
+	CreatedAt   string `json:"created_at"`
+	Phase       string `json:"phase,omitempty"`
+	Step        string `json:"step,omitempty"`
 }
 
 // Acceptance is a plan item criterion.
 type Acceptance struct {
-	ID       string `json:"id"`
-	Ordinal  int    `json:"ordinal"`
+	ID        string `json:"id"`
+	Ordinal   int    `json:"ordinal"`
 	Criterion string `json:"criterion"`
-	Status   string `json:"status"`
-	Evidence string `json:"evidence,omitempty"`
+	Status    string `json:"status"`
+	Evidence  string `json:"evidence,omitempty"`
 }
 
 // CreatePlanInput for plan create.
@@ -269,6 +269,8 @@ func MeetAcceptance(db *sql.DB, accPrefix, evidence, modelID string) (string, er
 }
 
 // CloseItem closes a plan item when all acceptance criteria are met.
+// As a side-effect, if the item belongs to a milestone and all sibling
+// items in that milestone are now done, the milestone is also marked done.
 func CloseItem(db *sql.DB, idPrefix, evidence, modelID string) (string, error) {
 	id, err := resolveItemID(db, idPrefix)
 	if err != nil {
@@ -291,7 +293,35 @@ func CloseItem(db *sql.DB, idPrefix, evidence, modelID string) (string, error) {
 	if err := SetItemStatus(db, id, "done", note, modelID); err != nil {
 		return "", err
 	}
+	if err := maybeCompleteMilestone(db, id, modelID); err != nil {
+		return id, fmt.Errorf("item closed but milestone rollup failed: %w", err)
+	}
 	return id, nil
+}
+
+// maybeCompleteMilestone marks the parent milestone done when no items
+// in it are still open. Items without a milestone are skipped silently.
+func maybeCompleteMilestone(db *sql.DB, itemID, modelID string) error {
+	var milestoneID sql.NullString
+	if err := db.QueryRow(`SELECT milestone_id FROM plan_items WHERE id=?`, itemID).Scan(&milestoneID); err != nil {
+		return err
+	}
+	if !milestoneID.Valid {
+		return nil
+	}
+	var openCount int
+	if err := db.QueryRow(`
+		SELECT COUNT(*) FROM plan_items
+		WHERE milestone_id=? AND status NOT IN ('done','wontfix')`,
+		milestoneID.String,
+	).Scan(&openCount); err != nil {
+		return err
+	}
+	if openCount > 0 {
+		return nil
+	}
+	_, err := db.Exec(`UPDATE milestones SET status='done' WHERE id=? AND status<>'done'`, milestoneID.String)
+	return err
 }
 
 // ListPlans returns active plans.
