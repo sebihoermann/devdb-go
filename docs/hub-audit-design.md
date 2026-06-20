@@ -135,7 +135,14 @@ stale verification
 - `--project <alias>` — repeatable; narrows registry walk
 - `--cached` — read from `~/.devdb/metadata.db` snapshot instead of
   live federation read
-- `--include-archived` — default off; surfaces archived feedback rows
+
+> Note: the original design included `--include-archived`, which was
+> implemented as a flag but never wired into the SQL because the
+> `feedback` table has no `archived` column. As of plan
+> `fix-open-feedback` M2.1, the flag has been removed from the CLI
+> entirely. A future migration that adds `feedback.archived INTEGER
+> DEFAULT 0` can re-introduce the flag with the SQL clause
+> `archived IS NULL OR archived=0`.
 
 ## Implementation
 

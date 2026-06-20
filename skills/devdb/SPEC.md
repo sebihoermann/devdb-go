@@ -963,7 +963,7 @@ verb that produces a unified cross-project open-issues-and-plans
 snapshot. Designed alongside `devdb-go · hub-audit` plan (see
 `docs/hub-audit-design.md`).
 
-**Verb:** `devdb hub audit [--severity <lvl>] [--kind <list>] [--project <alias>] [--cached] [--include-archived] [--json]`
+**Verb:** `devdb hub audit [--severity <lvl>] [--kind <list>] [--project <alias>] [--cached] [--json]`
 
 **Sections (canonical order):** `high_feedback`, `high_findings`,
 `stale_arch`, `overdue_reminders`, `in_progress`, `blocked`,

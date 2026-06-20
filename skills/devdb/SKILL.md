@@ -364,7 +364,7 @@ devdb hub project <alias_or_path> [--json]
 devdb hub doctor [--json]
 devdb hub across similar-feedback --keyword "import error"
 devdb hub across open-debt
-devdb hub audit [--severity <level>] [--kind <list>] [--project <alias>] [--cached] [--include-archived]
+devdb hub audit [--severity <level>] [--kind <list>] [--project <alias>] [--cached] 
 ```
 
 `hub audit` is the one-command cross-project session-start read: live

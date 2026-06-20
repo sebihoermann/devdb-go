@@ -383,7 +383,7 @@ func cmdHubAcross(openCtx opener) *cobra.Command {
 
 func cmdHubAudit(openCtx opener) *cobra.Command {
 	var severity, kindsRaw, projectsRaw string
-	var cached, includeArchived bool
+	var cached bool
 	c := &cobra.Command{
 		Use:   "audit",
 		Short: "Cross-project open issues + plans snapshot",
@@ -400,13 +400,12 @@ func cmdHubAudit(openCtx opener) *cobra.Command {
 			kinds := splitCSV(kindsRaw)
 			projects := splitCSV(projectsRaw)
 			report, err := hub.Audit(hub.AuditOptions{
-				Severity:        severity,
-				Kinds:           kinds,
-				Projects:        projects,
-				Mode:            mode,
-				IncludeArchived: includeArchived,
-				Registry:        flagRegistry,
-				MetadataDB:      flagMetadataDB,
+				Severity:   severity,
+				Kinds:      kinds,
+				Projects:   projects,
+				Mode:       mode,
+				Registry:   flagRegistry,
+				MetadataDB: flagMetadataDB,
 			})
 			if err != nil {
 				return &CLIError{Code: ExitInvalidValue, Message: err.Error(), Kind: "invalid_argument"}
@@ -422,7 +421,6 @@ func cmdHubAudit(openCtx opener) *cobra.Command {
 	c.Flags().StringVar(&kindsRaw, "kind", "", "comma-separated section subset: feedback,findings,stale_arch,overdue,in_progress,blocked,planned,verification")
 	c.Flags().StringVar(&projectsRaw, "project", "", "comma-separated alias filter; repeat to add more")
 	c.Flags().BoolVar(&cached, "cached", false, "read from ~/.devdb/metadata.db snapshot instead of live federation read")
-	c.Flags().BoolVar(&includeArchived, "include-archived", false, "include archived feedback rows in high_feedback")
 	return c
 }
 

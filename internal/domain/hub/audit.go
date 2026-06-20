@@ -92,9 +92,6 @@ type AuditOptions struct {
 	// Mode is "live" (default) for direct reads from each project's
 	// .devdb/development.db, or "cached" to read from ~/.devdb/metadata.db.
 	Mode string
-	// IncludeArchived surfaces archived feedback rows in the high_feedback
-	// section. Default false.
-	IncludeArchived bool
 	// Registry path override (default: ~/.devdb-projects).
 	Registry string
 	// MetadataDB path override (default: ~/.devdb/metadata.db).
@@ -208,7 +205,7 @@ func auditLive(report *AuditReport, registryPath string, threshold int, include 
 			ensureProjectCounts(report, p.Alias)
 			continue
 		}
-		auditOneProject(db, p.Alias, report, threshold, include, opts.IncludeArchived)
+		auditOneProject(db, p.Alias, report, threshold, include)
 		db.Close()
 	}
 	return nil
@@ -254,7 +251,7 @@ func mergeSnapshotIntoReport(report *AuditReport, alias string, s Snapshot, thre
 	}
 }
 
-func auditOneProject(db *sql.DB, alias string, report *AuditReport, threshold int, include func(string) bool, includeArchived bool) {
+func auditOneProject(db *sql.DB, alias string, report *AuditReport, threshold int, include func(string) bool) {
 	counts := ensureProjectCounts(report, alias)
 	sevList := severityListAtOrAbove(threshold)
 	if sevList == "" {
