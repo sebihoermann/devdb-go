@@ -742,7 +742,7 @@ func cmdPlanItemPause(open opener) *cobra.Command {
 }
 
 func cmdPlanItemClose(open opener) *cobra.Command {
-	var evidence string
+	var evidence, note string
 	c := &cobra.Command{
 		Use:   "close ID",
 		Short: "Close a plan item when acceptance is met",
@@ -756,15 +756,29 @@ func cmdPlanItemClose(open opener) *cobra.Command {
 			if err := ctx.RequireDB(); err != nil {
 				return err
 			}
-			id, err := planning.CloseItem(ctx.DB, args[0], evidence, ctx.ModelID)
+			id, err := planning.CloseItem(ctx.DB, args[0], combineEvidenceAndNote(evidence, note), ctx.ModelID)
 			if err != nil {
 				return &CLIError{Code: ExitInvalidValue, Message: err.Error(), Kind: "invalid_argument"}
 			}
 			return ctx.Out.WriteResult(id, map[string]any{"kind": "plan_item", "action": "close"})
 		},
 	}
-	c.Flags().StringVar(&evidence, "evidence", "", "closure evidence")
+	c.Flags().StringVar(&evidence, "evidence", "", "closure evidence (e.g. commit sha)")
+	c.Flags().StringVar(&note, "note", "", "free-form annotation prepended to the status_log entry")
 	return c
+}
+
+// combineEvidenceAndNote produces the status_log note for plan item close,
+// matching the convention used by plan item status --note.
+func combineEvidenceAndNote(evidence, note string) string {
+	switch {
+	case note != "" && evidence != "":
+		return note + " — " + evidence
+	case note != "":
+		return note
+	default:
+		return evidence
+	}
 }
 
 func cmdPlanAcceptanceAdd(open opener) *cobra.Command {

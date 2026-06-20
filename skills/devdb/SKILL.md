@@ -177,9 +177,9 @@ A plan item can carry structured detail. Use it when work is non-trivial.
 
 ```bash
 devdb plan create "Title" --slug my-plan
-devdb plan milestone add --plan my-plan --title "M1"
+devdb plan milestone add --plan my-plan --title "M1"          # title text only — see Convention 1 below
 devdb plan item add --plan my-plan --milestone M1 --title "..."
-devdb plan acceptance add --plan-item <plan_item_id> --criterion "text"   # auto-ordinal when --ordinal omitted
+devdb plan acceptance add --plan-item <plan_item_id> "text"   # criterion text is positional — see Convention 2 below
 devdb plan file add --plan-item <plan_item_id> --path PATH --role create|modify|forbidden|touched
 devdb plan show <plan-slug>                        # plan header + milestone list
 devdb plan item show <plan_item_id>               # item detail: body, acceptance, files, status log
@@ -187,6 +187,27 @@ devdb plan acceptance meet <acceptance_id_or_prefix> --evidence <commit_or_note>
 ```
 
 `plan item show` and `plan tree` print acceptance rows with `[id-prefix]` for copy-paste into `plan acceptance meet`.
+
+### Conventions (read these before scaffolding a plan)
+
+1. **Don't prefix milestone titles with `M1` / `M2`.** `devdb plan show` already
+   renders the milestone number ahead of the title. A title of `"M1 Med-severity
+   fixes"` displays as `M1 M1 Med-severity fixes [planned]`. Use only the
+   descriptive part: `"Med-severity fixes"`.
+
+2. **Don't start plan acceptance criterion text with `--`.** The CLI parser
+   interprets any leading flag-like token as a flag and rejects the criterion
+   with `unknown flag`. Start criteria with natural-language phrasing, e.g.
+   `"Passing the plan uuid via --plan still works"` rather than
+   `"--plan <uuid> still works"`.
+
+3. **When a session-start ritual step itself surfaces a bug, fold the fix +
+   regression test into the plan you're scaffolding.** A bug that blocks
+   `devdb inventory scan`, `devdb status`, or `devdb plan item show` is
+   unblockable for every future session. Treat it as priority one — log it
+   with `feedback add --role codebase`, then add an acceptance criterion that
+   requires the regression test alongside the code fix. Example:
+   `TestScanWithNullLanguageAndContentHash` was born this way.
 
 ```bash
 devdb plan scaffold "Title" --mode design    # define-scope acceptance template
@@ -203,7 +224,7 @@ Before marking a plan item `done`, run these in order:
 ```bash
 devdb plan item show <plan_item_id>                               # 1. read the unmet criteria
 devdb plan acceptance meet <criterion_id> --evidence <commit-or-note>  # 2. tick each met criterion
-devdb plan item close <plan_item_id> --evidence <commit-or-note>  # 3. preferred atomic close
+devdb plan item close <plan_item_id> --evidence <commit-or-note> [--note "free-form annotation"]  # 3. preferred atomic close; auto-completes the parent milestone when its last item closes
 # or: devdb plan item status <plan_item_id> done --note "..."     # 3alt. only after all criteria are met
 ```
 

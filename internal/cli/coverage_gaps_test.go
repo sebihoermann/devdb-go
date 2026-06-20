@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"database/sql"
 	"os"
 	"path/filepath"
 	"strings"
@@ -253,5 +254,40 @@ func TestHelpDispatchesToSubcommand(t *testing.T) {
 	}
 	if !strings.Contains(bogusStdout, "Available Commands") {
 		t.Fatalf("help bogus should fall back to global help: %q", bogusStdout)
+	}
+}
+
+// TestPlanItemCloseAcceptsNoteFlag verifies that 'plan item close'
+// accepts --note (in addition to --evidence) and concatenates them
+// into the status_log entry.
+func TestPlanItemCloseAcceptsNoteFlag(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "development.db")
+	runCLIOut(t, "--db", dbPath, "init")
+	planID := strings.TrimSpace(runCLIOut(t, "--db", dbPath, "plan", "create", "Note Plan", "--slug", "note-plan"))
+	itemID := strings.TrimSpace(runCLIOut(t, "--db", dbPath, "plan", "item", "add", "An item", "--plan", planID))
+	accID := strings.TrimSpace(runCLIOut(t, "--db", dbPath, "plan", "acceptance", "add", "--plan-item", itemID, "works"))
+	runCLIOut(t, "--db", dbPath, "plan", "acceptance", "meet", accID, "--evidence", "x")
+
+	stdout, _, code := runCLI(t, "--db", dbPath, "plan", "item", "close", itemID, "--note", "ship-it", "--evidence", "deadbeef")
+	if code != 0 {
+		t.Fatalf("close exit=%d", code)
+	}
+	if strings.TrimSpace(stdout) != itemID {
+		t.Fatalf("close stdout=%q want=%q", strings.TrimSpace(stdout), itemID)
+	}
+
+	// Verify the combined note landed in status_log.
+	db, err := storage.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var logNote sql.NullString
+	if err := db.QueryRow(`SELECT note FROM status_log WHERE plan_item_id=? AND status='done' ORDER BY created_at DESC LIMIT 1`, itemID).Scan(&logNote); err != nil {
+		t.Fatal(err)
+	}
+	if !logNote.Valid || !strings.Contains(logNote.String, "ship-it") || !strings.Contains(logNote.String, "deadbeef") {
+		t.Fatalf("status_log note=%q should contain both ship-it and deadbeef", logNote.String)
 	}
 }
