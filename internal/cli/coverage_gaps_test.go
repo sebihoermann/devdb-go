@@ -200,3 +200,27 @@ func TestArchVerifyAndInitExisting(t *testing.T) {
 	runCLIOut(t, "--db", dbPath, "init")
 	runCLIOut(t, "--db", dbPath, "init")
 }
+
+// TestPlanAddAcceptsSlugOrID is a regression for feedback dd1bf6f5:
+// 'plan milestone add' and 'plan item add' must accept --plan as a slug
+// or as a uuid (or id prefix) without an FK constraint failure.
+func TestPlanAddAcceptsSlugOrID(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "development.db")
+	runCLIOut(t, "--db", dbPath, "init")
+	planID := runCLIOut(t, "--db", dbPath, "plan", "create", "Slug Plan", "--slug", "slug-plan")
+	planID = strings.TrimSpace(planID)
+	if len(planID) != 32 {
+		t.Fatalf("plan id=%q", planID)
+	}
+
+	// Milestone add with slug must succeed.
+	runCLIOut(t, "--db", dbPath, "plan", "milestone", "add", "M-slug", "--plan", "slug-plan")
+	// Milestone add with uuid must still work (no regression).
+	runCLIOut(t, "--db", dbPath, "plan", "milestone", "add", "M-uuid", "--plan", planID)
+
+	// Item add with slug must succeed.
+	runCLIOut(t, "--db", dbPath, "plan", "item", "add", "Item-slug", "--plan", "slug-plan")
+	// Item add with uuid must still work (no regression).
+	runCLIOut(t, "--db", dbPath, "plan", "item", "add", "Item-uuid", "--plan", planID)
+}

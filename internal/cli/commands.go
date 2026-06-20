@@ -604,6 +604,13 @@ func cmdPlanItemAdd(open opener) *cobra.Command {
 				return err
 			}
 			title := strings.Join(args, " ")
+			if planID != "" {
+				resolved, err := planning.ResolvePlanID(ctx.DB, planID)
+				if err != nil {
+					return err
+				}
+				planID = resolved
+			}
 			var id string
 			if legacy {
 				id, err = planning.AddLegacyItem(ctx.DB, phase, step, title, body, ctx.ModelID)

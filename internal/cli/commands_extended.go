@@ -774,6 +774,11 @@ func cmdPlanMilestoneAdd(open opener) *cobra.Command {
 			if planID == "" {
 				return usageError("--plan is required")
 			}
+			resolved, err := planning.ResolvePlanID(ctx.DB, planID)
+			if err != nil {
+				return err
+			}
+			planID = resolved
 			id, err := planning.AddMilestone(ctx.DB, planID, strings.Join(args, " "), body, ctx.ModelID, number)
 			if err != nil {
 				return err
