@@ -106,7 +106,7 @@ func TestAddStructuredItemAndLegacyPaths(t *testing.T) {
 	if err != nil || id == "" {
 		t.Fatalf("structured=%q err=%v", id, err)
 	}
-	legacy, err := AddLegacyItem(db, "P", "2", "Legacy two", "notes", "test")
+	legacy, err := AddLegacyItem(db, "P", "2", "Legacy two", "notes", "", "test")
 	if err != nil || legacy == "" {
 		t.Fatalf("legacy=%q err=%v", legacy, err)
 	}
@@ -144,13 +144,16 @@ func TestScaffoldImplementAbsolutePath(t *testing.T) {
 func TestSetItemStatusAndShowBranches(t *testing.T) {
 	db, _ := testutil.TempDB(t)
 	planID, _ := CreatePlan(db, CreatePlanInput{Slug: "show", Title: "Show", ModelID: "test"})
-	itemID, _ := AddItem(db, AddItemInput{PlanID: planID, Title: "Item", ModelID: "test"})
+	itemID, _ := AddItem(db, AddItemInput{PlanID: planID, Title: "Item", MemoryRef: "memory/2026-06-22.md", ModelID: "test"})
 	if err := SetItemStatus(db, itemID, "planned", "", "test"); err != nil {
 		t.Fatal(err)
 	}
 	item, acc, err := ShowItem(db, itemID[:8])
 	if err != nil || item.ID != itemID {
 		t.Fatalf("show=%+v acc=%d err=%v", item, len(acc), err)
+	}
+	if item.MemoryRef != "memory/2026-06-22.md" {
+		t.Fatalf("memory_ref=%q", item.MemoryRef)
 	}
 	accID, _ := AddAcceptance(db, itemID, "works", "test", 1)
 	item, acc, err = ShowItem(db, itemID)

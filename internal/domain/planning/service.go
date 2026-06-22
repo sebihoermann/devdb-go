@@ -31,6 +31,7 @@ type PlanItem struct {
 	CreatedAt   string `json:"created_at"`
 	Phase       string `json:"phase,omitempty"`
 	Step        string `json:"step,omitempty"`
+	MemoryRef   string `json:"memory_ref,omitempty"`
 }
 
 // Acceptance is a plan item criterion.
@@ -75,6 +76,7 @@ type AddItemInput struct {
 	MilestoneID string
 	Title       string
 	Body        string
+	MemoryRef   string
 	ModelID     string
 }
 
@@ -90,9 +92,9 @@ func AddItem(db *sql.DB, in AddItemInput) (string, error) {
 	}
 	now := storage.NowUTC()
 	_, err = db.Exec(`
-		INSERT INTO plan_items(id, plan_id, milestone_id, item_number, title, body, status, created_at, model_id)
-		VALUES (?, ?, ?, ?, ?, ?, 'planned', ?, ?)`,
-		id, nullStr(in.PlanID), nullStr(in.MilestoneID), ordinal, in.Title, nullStr(in.Body), now, in.ModelID,
+		INSERT INTO plan_items(id, plan_id, milestone_id, item_number, title, body, memory_ref, status, created_at, model_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, 'planned', ?, ?)`,
+		id, nullStr(in.PlanID), nullStr(in.MilestoneID), ordinal, in.Title, nullStr(in.Body), nullStr(in.MemoryRef), now, in.ModelID,
 	)
 	return id, err
 }
@@ -208,14 +210,14 @@ func ShowItem(db *sql.DB, idPrefix string) (PlanItem, []Acceptance, error) {
 		return PlanItem{}, nil, err
 	}
 	var p PlanItem
-	var body, planID, milestoneID sql.NullString
+	var body, planID, milestoneID, memoryRef sql.NullString
 	var itemNum sql.NullInt64
 	err = db.QueryRow(`
 		SELECT id, COALESCE(plan_id,''), COALESCE(milestone_id,''), COALESCE(item_number,0),
 		       title, COALESCE(body,''), status, approval_status, created_at,
-		       COALESCE(phase,''), COALESCE(step,'')
+		       COALESCE(phase,''), COALESCE(step,''), COALESCE(memory_ref,'')
 		FROM plan_items WHERE id=?`, id,
-	).Scan(&p.ID, &planID, &milestoneID, &itemNum, &p.Title, &body, &p.Status, &p.Approval, &p.CreatedAt, &p.Phase, &p.Step)
+	).Scan(&p.ID, &planID, &milestoneID, &itemNum, &p.Title, &body, &p.Status, &p.Approval, &p.CreatedAt, &p.Phase, &p.Step, &memoryRef)
 	if err != nil {
 		return PlanItem{}, nil, err
 	}
@@ -223,6 +225,7 @@ func ShowItem(db *sql.DB, idPrefix string) (PlanItem, []Acceptance, error) {
 	p.MilestoneID = milestoneID.String
 	p.ItemNumber = int(itemNum.Int64)
 	p.Body = body.String
+	p.MemoryRef = memoryRef.String
 
 	rows, err := db.Query(`
 		SELECT id, ordinal, criterion, status, COALESCE(evidence,'')
@@ -505,16 +508,16 @@ func ListItems(db *sql.DB, f ItemFilter) ([]PlanItem, error) {
 }
 
 // AddLegacyItem creates a flat plan item (no plan_id).
-func AddLegacyItem(db *sql.DB, phase, step, title, body, modelID string) (string, error) {
+func AddLegacyItem(db *sql.DB, phase, step, title, body, memoryRef, modelID string) (string, error) {
 	id, err := storage.NewID()
 	if err != nil {
 		return "", err
 	}
 	now := storage.NowUTC()
 	_, err = db.Exec(`
-		INSERT INTO plan_items(id, phase, step, title, body, status, created_at, model_id)
-		VALUES (?, ?, ?, ?, ?, 'planned', ?, ?)`,
-		id, nullStr(phase), nullStr(step), title, nullStr(body), now, modelID,
+		INSERT INTO plan_items(id, phase, step, title, body, memory_ref, status, created_at, model_id)
+		VALUES (?, ?, ?, ?, ?, ?, 'planned', ?, ?)`,
+		id, nullStr(phase), nullStr(step), title, nullStr(body), nullStr(memoryRef), now, modelID,
 	)
 	return id, err
 }

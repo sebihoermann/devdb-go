@@ -76,7 +76,7 @@ func TestPlanFilesRolesAndLegacyList(t *testing.T) {
 	if err != nil || len(files) != 4 {
 		t.Fatalf("files=%d err=%v", len(files), err)
 	}
-	_, _ = AddLegacyItem(db, "P", "1", "Legacy", "body", "test")
+	_, _ = AddLegacyItem(db, "P", "1", "Legacy", "body", "", "test")
 	legacy, err := ListItems(db, ItemFilter{LegacyOnly: true})
 	if err != nil || len(legacy) != 1 {
 		t.Fatalf("legacy=%d err=%v", len(legacy), err)

@@ -122,7 +122,7 @@ func TestScaffoldPromoteAndServiceEdges(t *testing.T) {
 
 	planID, _ := CreatePlan(db, CreatePlanInput{Title: "Auto Slug", ModelID: "test"})
 	msID, _ := AddMilestone(db, planID, "M1", "", "test", 1)
-	legacyID, _ := AddLegacyItem(db, "P", "1", "L", "", "test")
+	legacyID, _ := AddLegacyItem(db, "P", "1", "L", "", "", "test")
 	_ = legacyID
 	itemID, _ := AddItem(db, AddItemInput{PlanID: planID, MilestoneID: msID, Title: "I", ModelID: "test"})
 	accID, _ := AddAcceptance(db, itemID, "criterion", "test", 0)

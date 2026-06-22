@@ -588,7 +588,7 @@ func cmdPlanList(open opener) *cobra.Command {
 }
 
 func cmdPlanItemAdd(open opener) *cobra.Command {
-	var planID, milestoneID, body, phase, step string
+	var planID, milestoneID, body, phase, step, memoryRef string
 	var legacy bool
 	c := &cobra.Command{
 		Use:   "add TITLE",
@@ -613,11 +613,11 @@ func cmdPlanItemAdd(open opener) *cobra.Command {
 			}
 			var id string
 			if legacy {
-				id, err = planning.AddLegacyItem(ctx.DB, phase, step, title, body, ctx.ModelID)
+				id, err = planning.AddLegacyItem(ctx.DB, phase, step, title, body, memoryRef, ctx.ModelID)
 			} else {
 				id, err = planning.AddItem(ctx.DB, planning.AddItemInput{
 					PlanID: planID, MilestoneID: milestoneID,
-					Title: title, Body: body, ModelID: ctx.ModelID,
+					Title: title, Body: body, MemoryRef: memoryRef, ModelID: ctx.ModelID,
 				})
 			}
 			if err != nil {
@@ -629,6 +629,7 @@ func cmdPlanItemAdd(open opener) *cobra.Command {
 	c.Flags().StringVar(&planID, "plan", "", "plan id")
 	c.Flags().StringVar(&milestoneID, "milestone", "", "milestone id")
 	c.Flags().StringVar(&body, "body", "", "item body")
+	c.Flags().StringVar(&memoryRef, "memory-ref", "", "optional memory anchor such as MEMORY.md#section or memory/YYYY-MM-DD.md")
 	c.Flags().BoolVar(&legacy, "legacy", false, "create legacy flat item (phase/step)")
 	c.Flags().StringVar(&phase, "phase", "", "legacy phase label")
 	c.Flags().StringVar(&step, "step", "", "legacy step label")
@@ -662,6 +663,9 @@ func cmdPlanItemShow(open opener) *cobra.Command {
 			}
 			if item.Phase != "" {
 				lines = append(lines, fmt.Sprintf("legacy: %s.%s", item.Phase, item.Step))
+			}
+			if item.MemoryRef != "" {
+				lines = append(lines, fmt.Sprintf("memory_ref: %s", item.MemoryRef))
 			}
 			files, _ := planning.ListPlanFiles(ctx.DB, item.ID)
 			if len(files) > 0 {

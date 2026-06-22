@@ -21,7 +21,7 @@ func TestCloseItemRequiresMetAcceptance(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	itemID, err := planning.AddLegacyItem(db, "M1", "1", "test", "", "test")
+	itemID, err := planning.AddLegacyItem(db, "M1", "1", "test", "", "", "test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestListItemsShowItemAndInFlight(t *testing.T) {
 	db, _ := testutil.TempDB(t)
 	planID, _ := planning.CreatePlan(db, planning.CreatePlanInput{Slug: "list", Title: "List", ModelID: "test"})
 	msID, _ := planning.AddMilestone(db, planID, "M1", "", "test", 1)
-	itemID, _ := planning.AddItem(db, planning.AddItemInput{PlanID: planID, MilestoneID: msID, Title: "Task", ModelID: "test"})
+	itemID, _ := planning.AddItem(db, planning.AddItemInput{PlanID: planID, MilestoneID: msID, Title: "Task", MemoryRef: "MEMORY.md#task", ModelID: "test"})
 	_, _ = planning.StartItem(db, itemID, "test")
 
 	items, err := planning.ListItems(db, planning.ItemFilter{PlanID: planID})
@@ -60,6 +60,9 @@ func TestListItemsShowItemAndInFlight(t *testing.T) {
 	show, acc, err := planning.ShowItem(db, itemID[:8])
 	if err != nil || show.ID != itemID {
 		t.Fatalf("show=%+v err=%v", show, err)
+	}
+	if show.MemoryRef != "MEMORY.md#task" {
+		t.Fatalf("memory_ref=%q", show.MemoryRef)
 	}
 	_ = acc
 	inFlight, err := planning.InFlight(db)

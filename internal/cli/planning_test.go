@@ -121,3 +121,48 @@ func TestM9LegacyCommandSuggestions(t *testing.T) {
 		t.Fatalf("missing suggestion: %q", stderr)
 	}
 }
+
+func TestPlanItemShowIncludesMemoryRef(t *testing.T) {
+	bin := buildDevdb(t)
+	dir := t.TempDir()
+	repo := filepath.Join(dir, "repo")
+	dbPath := filepath.Join(dir, ".devdb", "development.db")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	run := func(args ...string) string {
+		t.Helper()
+		all := append([]string{"--repo", repo, "--db", dbPath}, args...)
+		stdout, stderr, code := runDevdb(t, bin, all...)
+		if code != 0 {
+			t.Fatalf("%v exit %d stderr=%s stdout=%s", args, code, stderr, stdout)
+		}
+		return firstLine(stdout)
+	}
+
+	runOut := func(args ...string) string {
+		t.Helper()
+		all := append([]string{"--repo", repo, "--db", dbPath}, args...)
+		stdout, stderr, code := runDevdb(t, bin, all...)
+		if code != 0 {
+			t.Fatalf("%v exit %d stderr=%s stdout=%s", args, code, stderr, stdout)
+		}
+		return stdout
+	}
+
+	run("init")
+	planID := run("plan", "create", "Memory plan", "--slug", "memory-plan")
+	msID := run("plan", "milestone", "add", "--plan", planID, "Memory milestone")
+	itemID := run("plan", "item", "add", "--plan", planID, "--milestone", msID, "--memory-ref", "MEMORY.md#anchor", "Use memory ref")
+
+	showOut := runOut("plan", "item", "show", itemID)
+	if !strings.Contains(showOut, "memory_ref: MEMORY.md#anchor") {
+		t.Fatalf("show output: %q", showOut)
+	}
+
+	jsonOut := runOut("--json", "plan", "item", "show", itemID)
+	if !strings.Contains(jsonOut, `"memory_ref": "MEMORY.md#anchor"`) {
+		t.Fatalf("json output: %q", jsonOut)
+	}
+}
