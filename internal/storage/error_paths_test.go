@@ -86,6 +86,24 @@ func TestDetectSchemaPythonBranch(t *testing.T) {
 	}
 }
 
+func TestDetectSchemaGoBranchVersionScanError(t *testing.T) {
+	dir := t.TempDir()
+	db, err := Open(filepath.Join(dir, "go-bad.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`CREATE TABLE schema_migrations (version INTEGER, description TEXT)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO schema_migrations(version, description) VALUES ('not-int', 'go:bad')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := DetectSchema(db); err == nil {
+		t.Fatal("expected go-branch version scan error")
+	}
+}
+
 func TestColumnNamesScanError(t *testing.T) {
 	dir := t.TempDir()
 	db, err := Open(filepath.Join(dir, "bad.db"))

@@ -1370,8 +1370,8 @@ func TestInProcessQualityErrorPaths(t *testing.T) {
 	runCLIOut(t, "--repo", repo, "--db", dbPath, "init")
 	_, stderr, code = runCLI(t, "--repo", repo, "--db", dbPath,
 		"verify", "record", "cmd", "--scope", ".", "--status", "pending")
-	if code == 0 || !strings.Contains(stderr, "git-sha") {
-		t.Fatalf("verify without git: code=%d stderr=%q", code, stderr)
+	if code != 0 {
+		t.Fatalf("verify without git should now succeed: code=%d stderr=%q", code, stderr)
 	}
 
 	e.run("inventory", "scan")

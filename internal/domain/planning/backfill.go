@@ -15,7 +15,7 @@ func BackfillAcceptanceFromSpec(db *sql.DB, milestone, specPath, modelID string)
 	data, err := os.ReadFile(specPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return 0, fmt.Errorf("spec file not found: %s", specPath)
+			return 0, fmt.Errorf("%w: %s", ErrSpecFileNotFound, specPath)
 		}
 		return 0, err
 	}

@@ -1,6 +1,7 @@
 package archive
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/sebihoermann/devdb-go/internal/storage"
@@ -57,6 +58,34 @@ func TestRestoreRejectsBadQuery(t *testing.T) {
 	_, err := Restore(db, RestoreOptions{Table: "features"})
 	if err == nil {
 		t.Fatal("expected restore query error")
+	}
+}
+
+func TestRestoreRejectsInvalidArchivedSourceTable(t *testing.T) {
+	db := archiveTestDB(t)
+	archID, _ := storage.NewID()
+	if _, err := db.Exec(`
+		INSERT INTO archive_entries(id, source_table, source_id, payload_json, archived_at)
+		VALUES (?, 'features; DROP TABLE feedback; --', 'x', '{"id":"x"}', ?)`, archID, storage.NowUTC()); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Restore(db, RestoreOptions{ID: archID})
+	if err == nil || !strings.Contains(err.Error(), "invalid archived source table") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestRestoreRejectsInvalidArchivedColumn(t *testing.T) {
+	db := archiveTestDB(t)
+	archID, _ := storage.NewID()
+	if _, err := db.Exec(`
+		INSERT INTO archive_entries(id, source_table, source_id, payload_json, archived_at)
+		VALUES (?, 'features', 'x', '{"id":"x","title":"feat","bad) VALUES (1); --":"boom"}', ?)`, archID, storage.NowUTC()); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Restore(db, RestoreOptions{ID: archID})
+	if err == nil || !strings.Contains(err.Error(), "invalid archived column") {
+		t.Fatalf("err=%v", err)
 	}
 }
 

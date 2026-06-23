@@ -84,7 +84,7 @@ func ScaffoldPlan(db *sql.DB, in ScaffoldPlanInput) (ScaffoldPlanResult, error) 
 		mode = "implement"
 	}
 	if mode != "implement" && mode != "design" {
-		return ScaffoldPlanResult{}, fmt.Errorf("mode must be implement or design")
+		return ScaffoldPlanResult{}, ErrInvalidMode
 	}
 	count := in.MilestoneCount
 	if count <= 0 {
@@ -105,7 +105,7 @@ func ScaffoldPlan(db *sql.DB, in ScaffoldPlanInput) (ScaffoldPlanResult, error) 
 	planID, err := CreatePlan(db, CreatePlanInput{Slug: slug, Title: in.Title, Body: body, ModelID: in.ModelID})
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
-			return ScaffoldPlanResult{}, fmt.Errorf("plan slug already exists: %s", slug)
+			return ScaffoldPlanResult{}, fmt.Errorf("%w: %s", ErrSlugExists, slug)
 		}
 		return ScaffoldPlanResult{}, err
 	}

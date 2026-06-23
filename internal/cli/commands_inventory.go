@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -276,10 +277,11 @@ func cmdArchAdd(open opener) *cobra.Command {
 			}
 			id, err := architecture.Add(ctx.DB, args[0], body, sources, confidence, ctx.ModelID)
 			if err != nil {
-				if err.Error() == "invalid topic" {
+				if errors.Is(err, architecture.ErrInvalidTopic) {
 					return &CLIError{Code: ExitInvalidValue, Message: err.Error(), Kind: "invalid_topic"}
 				}
-				if strings.HasPrefix(err.Error(), "missing source path:") {
+				var missingSource *architecture.MissingSourceError
+				if errors.As(err, &missingSource) {
 					return &CLIError{Code: ExitNotFound, Message: err.Error(), Kind: "missing_source"}
 				}
 				return err
@@ -379,7 +381,8 @@ func cmdArchUpdate(open opener) *cobra.Command {
 			}
 			id, ok, err := architecture.Update(ctx.DB, args[0], bodyPtr, srcSlice, confPtr)
 			if err != nil {
-				if strings.HasPrefix(err.Error(), "missing source path:") {
+				var missingSource *architecture.MissingSourceError
+				if errors.As(err, &missingSource) {
 					return &CLIError{Code: ExitNotFound, Message: err.Error(), Kind: "missing_source"}
 				}
 				return err
@@ -429,7 +432,7 @@ func cmdArchVerify(open opener) *cobra.Command {
 			}
 			status, _, id, err := architecture.Verify(ctx.DB, args[0])
 			if err != nil {
-				if err.Error() == "note not found" {
+				if errors.Is(err, architecture.ErrNoteNotFound) {
 					return notFoundError(err.Error())
 				}
 				return err

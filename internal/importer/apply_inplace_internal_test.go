@@ -1,8 +1,10 @@
 package importer
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/sebihoermann/devdb-go/internal/migrate"
@@ -59,4 +61,38 @@ func writeMinimalPythonDBWithFeedback(path string) error {
 		}
 	}
 	return nil
+}
+
+func TestApplyInPlaceReportsRestoreFailure(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "development.db")
+	if err := writeMinimalPythonDBWithFeedback(dbPath); err != nil {
+		t.Fatal(err)
+	}
+
+	originalRename := renameFile
+	t.Cleanup(func() { renameFile = originalRename })
+	renameCalls := 0
+	renameFile = func(oldPath, newPath string) error {
+		renameCalls++
+		switch renameCalls {
+		case 2:
+			return fmt.Errorf("replace failed")
+		case 3:
+			return fmt.Errorf("restore failed")
+		default:
+			return originalRename(oldPath, newPath)
+		}
+	}
+
+	_, err := ApplyInPlace(dbPath, true, false)
+	if err == nil {
+		t.Fatal("expected replace failure")
+	}
+	if !strings.Contains(err.Error(), "replace database: replace failed") {
+		t.Fatalf("err=%v", err)
+	}
+	if !strings.Contains(err.Error(), "restore backup: restore failed") {
+		t.Fatalf("err=%v", err)
+	}
 }

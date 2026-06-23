@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -33,10 +34,10 @@ func cmdPlanScaffold(open opener) *cobra.Command {
 				ModelID: ctx.ModelID,
 			})
 			if err != nil {
-				if strings.Contains(err.Error(), "slug already exists") {
+				if errors.Is(err, planning.ErrSlugExists) {
 					return &CLIError{Code: ExitGeneral, Message: err.Error(), Kind: "invalid_argument"}
 				}
-				if strings.Contains(err.Error(), "mode must be") {
+				if errors.Is(err, planning.ErrInvalidMode) {
 					return &CLIError{Code: ExitUsage, Message: err.Error(), Kind: "invalid_argument"}
 				}
 				return err
@@ -78,7 +79,7 @@ func cmdPlanPromote(open opener) *cobra.Command {
 			}
 			result, err := planning.PromotePlan(ctx.DB, planRef, ctx.ModelID)
 			if err != nil {
-				if strings.Contains(err.Error(), "plan not found") {
+				if errors.Is(err, planning.ErrPlanNotFound) {
 					return notFoundError("plan not found")
 				}
 				return err
@@ -113,7 +114,7 @@ func cmdPlanReconcile(open opener) *cobra.Command {
 			}
 			result, err := planning.ReconcilePlans(ctx.DB, planRef, apply)
 			if err != nil {
-				if strings.Contains(err.Error(), "plan not found") {
+				if errors.Is(err, planning.ErrPlanNotFound) {
 					return notFoundError("plan not found")
 				}
 				return err
@@ -178,7 +179,7 @@ func cmdPlanAcceptanceBackfill(open opener) *cobra.Command {
 			}
 			count, err := planning.BackfillAcceptanceFromSpec(ctx.DB, milestone, specPath, ctx.ModelID)
 			if err != nil {
-				if strings.Contains(err.Error(), "spec file not found") {
+				if errors.Is(err, planning.ErrSpecFileNotFound) {
 					return notFoundError(err.Error())
 				}
 				return err

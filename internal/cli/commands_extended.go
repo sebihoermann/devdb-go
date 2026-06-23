@@ -832,12 +832,14 @@ func cmdPlanMilestoneStatus(open opener) *cobra.Command {
 			if err := ctx.RequireDB(); err != nil {
 				return err
 			}
-			_, err = ctx.DB.Exec(`UPDATE milestones SET status=? WHERE id=? OR id LIKE ?`,
-				args[1], args[0], args[0]+"%")
+			id, err := planning.ResolveMilestoneIDByPrefix(ctx.DB, args[0])
 			if err != nil {
 				return err
 			}
-			return ctx.Out.WriteResult(args[0], map[string]any{"kind": "milestone", "action": "status"})
+			if _, err := ctx.DB.Exec(`UPDATE milestones SET status=? WHERE id=?`, args[1], id); err != nil {
+				return err
+			}
+			return ctx.Out.WriteResult(id, map[string]any{"kind": "milestone", "action": "status"})
 		},
 	}
 }

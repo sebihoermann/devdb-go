@@ -2,6 +2,7 @@ package storage
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/sebihoermann/devdb-go/internal/migrate"
@@ -88,6 +89,9 @@ func TestTableExistsAndColumnNames(t *testing.T) {
 	}
 	if len(cols) == 0 {
 		t.Fatal("expected columns")
+	}
+	if _, err := ColumnNames(db, `feedback); DROP TABLE feedback; --`); err == nil || !strings.Contains(err.Error(), "invalid table identifier") {
+		t.Fatalf("unexpected err=%v", err)
 	}
 }
 

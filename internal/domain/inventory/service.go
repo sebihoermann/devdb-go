@@ -28,6 +28,9 @@ type existingFile struct {
 }
 
 // Scan updates repo_files and records scan_runs + file_change_events.
+// All repository writes (INSERT/UPDATE/DELETE on repo_files, scan_runs, and
+// file_change_events) run inside a single transaction; if any write fails the
+// scan leaves no partial state behind.
 func Scan(db *sql.DB, repoRoot string, paths []string, gitAware bool, modelID string) (ScanResult, error) {
 	records, err := ScanInventory(repoRoot, paths, gitAware)
 	if err != nil {
@@ -67,22 +70,8 @@ func Scan(db *sql.DB, repoRoot string, paths []string, gitAware bool, modelID st
 	for _, rec := range records {
 		seen[rec.Path] = true
 		prev, ok := existing[rec.Path]
-		lang := nullStr(rec.Language)
-		hash := nullStr(rec.ContentHash)
-		var lines any
-		if rec.Lines != nil {
-			lines = *rec.Lines
-		}
 
 		if !ok {
-			_, err = db.Exec(`
-				INSERT INTO repo_files(path, language, kind, lines, content_hash, size_bytes, last_seen_at, last_scan_run_id)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-				rec.Path, lang, rec.Kind, lines, hash, rec.SizeBytes, now, runID,
-			)
-			if err != nil {
-				return ScanResult{}, err
-			}
 			added++
 			events = append(events, changeEvent{"added", rec.Path, "", rec.ContentHash})
 		} else {
@@ -112,20 +101,15 @@ func Scan(db *sql.DB, repoRoot string, paths []string, gitAware bool, modelID st
 				changed++
 				events = append(events, changeEvent{"modified", rec.Path, prevHash, rec.ContentHash})
 			}
-			_, err = db.Exec(`
-				UPDATE repo_files SET language=?, kind=?, lines=?, content_hash=?, size_bytes=?, last_seen_at=?, last_scan_run_id=?
-				WHERE path=?`,
-				lang, rec.Kind, lines, hash, rec.SizeBytes, now, runID, rec.Path,
-			)
-			if err != nil {
-				return ScanResult{}, err
-			}
 		}
 	}
 
 	removed := 0
 	for path, row := range existing {
 		if seen[path] {
+			continue
+		}
+		if row.kind == "external" {
 			continue
 		}
 		if pathInScope(path, scope) {
@@ -138,34 +122,77 @@ func Scan(db *sql.DB, repoRoot string, paths []string, gitAware bool, modelID st
 		if len(paths) > 0 && !pathInScope(path, scope) {
 			continue
 		}
-		if _, err := db.Exec(`DELETE FROM repo_files WHERE path=?`, path); err != nil {
-			return ScanResult{}, err
-		}
 		removed++
 	}
 
-	_, err = db.Exec(`
-		INSERT INTO scan_runs(id, started_at, finished_at, git_sha, files_seen, files_added, files_changed, files_removed, model_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		runID, now, now, nullStr(sha), len(records), added, changed, removed, modelID,
-	)
+	err = storage.WithTx(db, func(tx *sql.Tx) error {
+		for _, rec := range records {
+			_, ok := existing[rec.Path]
+			lang := nullStr(rec.Language)
+			hash := nullStr(rec.ContentHash)
+			var lines any
+			if rec.Lines != nil {
+				lines = *rec.Lines
+			}
+			if !ok {
+				if _, err := tx.Exec(`
+					INSERT INTO repo_files(path, language, kind, lines, content_hash, size_bytes, last_seen_at, last_scan_run_id)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+					rec.Path, lang, rec.Kind, lines, hash, rec.SizeBytes, now, runID,
+				); err != nil {
+					return err
+				}
+				continue
+			}
+			if _, err := tx.Exec(`
+				UPDATE repo_files SET language=?, kind=?, lines=?, content_hash=?, size_bytes=?, last_seen_at=?, last_scan_run_id=?
+				WHERE path=?`,
+				lang, rec.Kind, lines, hash, rec.SizeBytes, now, runID, rec.Path,
+			); err != nil {
+				return err
+			}
+		}
+
+		for path, row := range existing {
+			if seen[path] {
+				continue
+			}
+			if row.kind == "external" {
+				continue
+			}
+			if len(paths) > 0 && !pathInScope(path, scope) {
+				continue
+			}
+			if _, err := tx.Exec(`DELETE FROM repo_files WHERE path=?`, path); err != nil {
+				return err
+			}
+		}
+
+		if _, err := tx.Exec(`
+			INSERT INTO scan_runs(id, started_at, finished_at, git_sha, files_seen, files_added, files_changed, files_removed, model_id)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			runID, now, now, nullStr(sha), len(records), added, changed, removed, modelID,
+		); err != nil {
+			return err
+		}
+
+		for _, ev := range events {
+			evID, err := storage.NewID()
+			if err != nil {
+				return err
+			}
+			if _, err := tx.Exec(`
+				INSERT INTO file_change_events(id, scan_run_id, path, change_kind, old_hash, new_hash, created_at, model_id)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+				evID, runID, ev.path, ev.kind, nullStr(ev.oldHash), nullStr(ev.newHash), now, modelID,
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 	if err != nil {
 		return ScanResult{}, err
-	}
-
-	for _, ev := range events {
-		evID, err := storage.NewID()
-		if err != nil {
-			return ScanResult{}, err
-		}
-		_, err = db.Exec(`
-			INSERT INTO file_change_events(id, scan_run_id, path, change_kind, old_hash, new_hash, created_at, model_id)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			evID, runID, ev.path, ev.kind, nullStr(ev.oldHash), nullStr(ev.newHash), now, modelID,
-		)
-		if err != nil {
-			return ScanResult{}, err
-		}
 	}
 
 	return ScanResult{

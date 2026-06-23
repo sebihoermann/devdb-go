@@ -18,6 +18,8 @@ import (
 // force=true (CLI: --force) to ignore the check.
 var ErrPythonBakAlreadyMigrated = errors.New("sibling .python-bak has Go schema — already migrated; pass --force to ignore")
 
+var renameFile = os.Rename
+
 // PythonLedgerInfo describes a legacy database.
 type PythonLedgerInfo struct {
 	Path    string `json:"path"`
@@ -181,13 +183,16 @@ func ApplyInPlace(dbPath string, noArchive, force bool) (ImportResult, error) {
 		result.Archived = archived
 	}
 	_ = os.Remove(backup)
-	if err := os.Rename(abs, backup); err != nil {
+	if err := renameFile(abs, backup); err != nil {
 		_ = os.Remove(tmp)
 		return ImportResult{}, fmt.Errorf("backup %s: %w", backup, err)
 	}
-	if err := os.Rename(tmp, abs); err != nil {
-		_ = os.Rename(backup, abs)
+	if err := renameFile(tmp, abs); err != nil {
+		restoreErr := renameFile(backup, abs)
 		_ = os.Remove(tmp)
+		if restoreErr != nil {
+			return ImportResult{}, fmt.Errorf("replace database: %w; restore backup: %v", err, restoreErr)
+		}
 		return ImportResult{}, fmt.Errorf("replace database: %w", err)
 	}
 	result.DestPath = abs
@@ -204,18 +209,27 @@ func copyLegacyData(dst *sql.DB, srcAbs string, counts map[string]int) error {
 	if _, err := dst.Exec("PRAGMA foreign_keys = OFF"); err != nil {
 		return err
 	}
-	for _, spec := range copySpecs() {
-		res, err := dst.Exec(spec.sql)
-		if err != nil {
-			if strings.Contains(err.Error(), "no such table") {
-				continue
+	defer func() {
+		_, _ = dst.Exec("PRAGMA foreign_keys = ON")
+	}()
+	// Run every legacy-table insert inside one transaction so a mid-sequence
+	// failure rolls back the partial import. Detach and the deferred FK restore
+	// stay outside the rollback boundary because they are infrastructure, not
+	// imported data.
+	if err := storage.WithTx(dst, func(tx *sql.Tx) error {
+		for _, spec := range copySpecs() {
+			res, err := tx.Exec(spec.sql)
+			if err != nil {
+				if strings.Contains(err.Error(), "no such table") {
+					continue
+				}
+				return fmt.Errorf("copy %s: %w", spec.table, err)
 			}
-			return fmt.Errorf("copy %s: %w", spec.table, err)
+			n, _ := res.RowsAffected()
+			counts[spec.table] = int(n)
 		}
-		n, _ := res.RowsAffected()
-		counts[spec.table] = int(n)
-	}
-	if _, err := dst.Exec("PRAGMA foreign_keys = ON"); err != nil {
+		return nil
+	}); err != nil {
 		return err
 	}
 	return nil

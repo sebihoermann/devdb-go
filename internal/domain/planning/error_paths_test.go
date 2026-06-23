@@ -25,7 +25,7 @@ func TestErrorPathsClosedDB(t *testing.T) {
 		func() error { _, _, err := ShowPlan(db, "x"); return err },
 		func() error { _, err := PlanTree(db, "x"); return err },
 		func() error { _, err := ListItems(db, ItemFilter{}); return err },
-		func() error { _, err := AddLegacyItem(db, "M", "1", "t", "", "t"); return err },
+		func() error { _, err := AddLegacyItem(db, "M", "1", "t", "", "", "t"); return err },
 		func() error { _, err := AddPlanFile(db, "x", "a.go", "modify", "t"); return err },
 		func() error { _, err := ListPlanFiles(db, "x"); return err },
 		func() error { _, err := SetItemStatusExplicit(db, "x", "open", "", "t"); return err },

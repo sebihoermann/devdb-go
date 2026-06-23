@@ -122,7 +122,7 @@ func TestServiceCRUDAndLifecycle(t *testing.T) {
 		t.Fatalf("tree=%+v err=%v", tree, err)
 	}
 
-	legacyID, err := planning.AddLegacyItem(db, "M2", "1", "legacy task", "", "test")
+	legacyID, err := planning.AddLegacyItem(db, "M2", "1", "legacy task", "", "", "test")
 	if err != nil {
 		t.Fatal(err)
 	}

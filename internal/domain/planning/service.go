@@ -31,6 +31,7 @@ type PlanItem struct {
 	CreatedAt   string `json:"created_at"`
 	Phase       string `json:"phase,omitempty"`
 	Step        string `json:"step,omitempty"`
+	MemoryRef   string `json:"memory_ref,omitempty"`
 }
 
 // Acceptance is a plan item criterion.
@@ -75,6 +76,7 @@ type AddItemInput struct {
 	MilestoneID string
 	Title       string
 	Body        string
+	MemoryRef   string
 	ModelID     string
 }
 
@@ -90,9 +92,9 @@ func AddItem(db *sql.DB, in AddItemInput) (string, error) {
 	}
 	now := storage.NowUTC()
 	_, err = db.Exec(`
-		INSERT INTO plan_items(id, plan_id, milestone_id, item_number, title, body, status, created_at, model_id)
-		VALUES (?, ?, ?, ?, ?, ?, 'planned', ?, ?)`,
-		id, nullStr(in.PlanID), nullStr(in.MilestoneID), ordinal, in.Title, nullStr(in.Body), now, in.ModelID,
+		INSERT INTO plan_items(id, plan_id, milestone_id, item_number, title, body, memory_ref, status, created_at, model_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, 'planned', ?, ?)`,
+		id, nullStr(in.PlanID), nullStr(in.MilestoneID), ordinal, in.Title, nullStr(in.Body), nullStr(in.MemoryRef), now, in.ModelID,
 	)
 	return id, err
 }
@@ -131,21 +133,26 @@ func AddAcceptance(db *sql.DB, planItemID, criterion, modelID string, ordinal in
 }
 
 // SetItemStatus updates plan item status and logs it.
+// Both writes run inside a single transaction; if the audit-log insert fails,
+// the status update is rolled back so the item cannot end up with a status
+// change that has no matching status_log row.
 func SetItemStatus(db *sql.DB, itemID, status, note, modelID string) error {
 	now := storage.NowUTC()
-	if _, err := db.Exec(`UPDATE plan_items SET status=? WHERE id=?`, status, itemID); err != nil {
+	return storage.WithTx(db, func(tx *sql.Tx) error {
+		if _, err := tx.Exec(`UPDATE plan_items SET status=? WHERE id=?`, status, itemID); err != nil {
+			return err
+		}
+		logID, err := storage.NewID()
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(`
+			INSERT INTO status_log(id, plan_item_id, status, note, created_at, model_id)
+			VALUES (?, ?, ?, ?, ?, ?)`,
+			logID, itemID, status, nullStr(note), now, modelID,
+		)
 		return err
-	}
-	logID, err := storage.NewID()
-	if err != nil {
-		return err
-	}
-	_, err = db.Exec(`
-		INSERT INTO status_log(id, plan_item_id, status, note, created_at, model_id)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		logID, itemID, status, nullStr(note), now, modelID,
-	)
-	return err
+	})
 }
 
 // StartItem marks a plan item in progress.
@@ -163,7 +170,7 @@ func StartItem(db *sql.DB, idPrefix, modelID string) (string, error) {
 // PauseItem marks in-progress work paused with a required note.
 func PauseItem(db *sql.DB, idPrefix, note, modelID string) (string, error) {
 	if strings.TrimSpace(note) == "" {
-		return "", fmt.Errorf("--note is required on pause")
+		return "", ErrNoteRequired
 	}
 	id, err := resolveItemID(db, idPrefix)
 	if err != nil {
@@ -208,14 +215,14 @@ func ShowItem(db *sql.DB, idPrefix string) (PlanItem, []Acceptance, error) {
 		return PlanItem{}, nil, err
 	}
 	var p PlanItem
-	var body, planID, milestoneID sql.NullString
+	var body, planID, milestoneID, memoryRef sql.NullString
 	var itemNum sql.NullInt64
 	err = db.QueryRow(`
 		SELECT id, COALESCE(plan_id,''), COALESCE(milestone_id,''), COALESCE(item_number,0),
 		       title, COALESCE(body,''), status, approval_status, created_at,
-		       COALESCE(phase,''), COALESCE(step,'')
+		       COALESCE(phase,''), COALESCE(step,''), COALESCE(memory_ref,'')
 		FROM plan_items WHERE id=?`, id,
-	).Scan(&p.ID, &planID, &milestoneID, &itemNum, &p.Title, &body, &p.Status, &p.Approval, &p.CreatedAt, &p.Phase, &p.Step)
+	).Scan(&p.ID, &planID, &milestoneID, &itemNum, &p.Title, &body, &p.Status, &p.Approval, &p.CreatedAt, &p.Phase, &p.Step, &memoryRef)
 	if err != nil {
 		return PlanItem{}, nil, err
 	}
@@ -223,6 +230,7 @@ func ShowItem(db *sql.DB, idPrefix string) (PlanItem, []Acceptance, error) {
 	p.MilestoneID = milestoneID.String
 	p.ItemNumber = int(itemNum.Int64)
 	p.Body = body.String
+	p.MemoryRef = memoryRef.String
 
 	rows, err := db.Query(`
 		SELECT id, ordinal, criterion, status, COALESCE(evidence,'')
@@ -465,7 +473,7 @@ type ItemFilter struct {
 func ListItems(db *sql.DB, f ItemFilter) ([]PlanItem, error) {
 	q := `SELECT id, COALESCE(plan_id,''), COALESCE(milestone_id,''), COALESCE(item_number,0),
 	      title, COALESCE(body,''), status, approval_status, created_at,
-	      COALESCE(phase,''), COALESCE(step,'')
+	      COALESCE(phase,''), COALESCE(step,''), COALESCE(memory_ref,'')
 	      FROM plan_items WHERE 1=1`
 	args := []any{}
 	if f.LegacyOnly {
@@ -496,7 +504,7 @@ func ListItems(db *sql.DB, f ItemFilter) ([]PlanItem, error) {
 	for rows.Next() {
 		var p PlanItem
 		if err := rows.Scan(&p.ID, &p.PlanID, &p.MilestoneID, &p.ItemNumber, &p.Title, &p.Body,
-			&p.Status, &p.Approval, &p.CreatedAt, &p.Phase, &p.Step); err != nil {
+			&p.Status, &p.Approval, &p.CreatedAt, &p.Phase, &p.Step, &p.MemoryRef); err != nil {
 			return nil, err
 		}
 		out = append(out, p)
@@ -505,16 +513,16 @@ func ListItems(db *sql.DB, f ItemFilter) ([]PlanItem, error) {
 }
 
 // AddLegacyItem creates a flat plan item (no plan_id).
-func AddLegacyItem(db *sql.DB, phase, step, title, body, modelID string) (string, error) {
+func AddLegacyItem(db *sql.DB, phase, step, title, body, memoryRef, modelID string) (string, error) {
 	id, err := storage.NewID()
 	if err != nil {
 		return "", err
 	}
 	now := storage.NowUTC()
 	_, err = db.Exec(`
-		INSERT INTO plan_items(id, phase, step, title, body, status, created_at, model_id)
-		VALUES (?, ?, ?, ?, ?, 'planned', ?, ?)`,
-		id, nullStr(phase), nullStr(step), title, nullStr(body), now, modelID,
+		INSERT INTO plan_items(id, phase, step, title, body, memory_ref, status, created_at, model_id)
+		VALUES (?, ?, ?, ?, ?, ?, 'planned', ?, ?)`,
+		id, nullStr(phase), nullStr(step), title, nullStr(body), nullStr(memoryRef), now, modelID,
 	)
 	return id, err
 }

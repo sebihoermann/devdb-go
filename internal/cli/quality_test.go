@@ -68,3 +68,41 @@ func TestReviewVerifySession(t *testing.T) {
 		t.Fatalf("principles: %q", principlesOut)
 	}
 }
+
+func TestVerifyRecordWithoutGitSHAInNonGitRepo(t *testing.T) {
+	bin := buildDevdb(t)
+	dir := t.TempDir()
+	repo := filepath.Join(dir, "repo")
+	dbPath := filepath.Join(dir, ".devdb", "development.db")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "main.go"), []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	run := func(args ...string) string {
+		t.Helper()
+		all := append([]string{"--repo", repo, "--db", dbPath}, args...)
+		stdout, stderr, code := runDevdb(t, bin, all...)
+		if code != 0 {
+			t.Fatalf("%v exit %d stderr=%s stdout=%s", args, code, stderr, stdout)
+		}
+		return firstLine(stdout)
+	}
+
+	run("init")
+	run("inventory", "scan")
+	runID := run("verify", "record", "go test ./...", "--scope", ".", "--status", "passed", "--exit-code", "0", "--finished")
+
+	showOut, _, code := runDevdb(t, bin, "--repo", repo, "--db", dbPath, "verify", "show", runID)
+	if code != 0 {
+		t.Fatalf("verify show exit %d", code)
+	}
+	if !strings.Contains(showOut, "- git_sha:") {
+		t.Fatalf("show output missing git_sha line: %q", showOut)
+	}
+	if strings.Contains(showOut, "- git_sha: abc123") {
+		t.Fatalf("show output unexpectedly has explicit sha: %q", showOut)
+	}
+}

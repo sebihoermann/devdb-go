@@ -3,11 +3,95 @@ package migrate
 import (
 	"database/sql"
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/sebihoermann/devdb-go/internal/storage"
 )
+
+func TestValidateMigrations(t *testing.T) {
+	tests := []struct {
+		name       string
+		migrations []Migration
+		want       string
+	}{
+		{name: "valid", migrations: []Migration{{Version: 1}, {Version: 2}, {Version: 4}}},
+		{name: "zero", migrations: []Migration{{Version: 0}}, want: "non-positive"},
+		{name: "negative", migrations: []Migration{{Version: -1}}, want: "non-positive"},
+		{name: "duplicate", migrations: []Migration{{Version: 1}, {Version: 2}, {Version: 2}}, want: "must be greater"},
+		{name: "unordered", migrations: []Migration{{Version: 1}, {Version: 3}, {Version: 2}}, want: "must be greater"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateMigrations("test", tt.migrations)
+			if tt.want == "" && err != nil {
+				t.Fatal(err)
+			}
+			if tt.want != "" && (err == nil || !strings.Contains(err.Error(), tt.want)) {
+				t.Fatalf("error=%v want substring %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestRunAllRejectsDuplicateVersionBeforeDatabaseMutation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "development.db")
+	db, err := storage.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	backup := SourceMigrations
+	t.Cleanup(func() { SourceMigrations = backup })
+	SourceMigrations = append(append([]Migration(nil), SourceMigrations...), Migration{
+		Version:     SourceMigrations[len(SourceMigrations)-1].Version,
+		Description: "test:duplicate memory_ref-style collision",
+		Apply: func(tx *sql.Tx) error {
+			_, err := tx.Exec(`CREATE TABLE should_not_exist (id INTEGER)`)
+			return err
+		},
+	})
+
+	err = RunAll(db)
+	if err == nil || !strings.Contains(err.Error(), "must be greater") {
+		t.Fatalf("error=%v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('schema_migrations','should_not_exist')`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("migration validation mutated database: tables=%d", count)
+	}
+}
+
+func TestRunHubRejectsUnorderedVersionBeforeDatabaseMutation(t *testing.T) {
+	db, err := storage.Open(filepath.Join(t.TempDir(), "metadata.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	backup := HubMigrations
+	t.Cleanup(func() { HubMigrations = backup })
+	HubMigrations = append(append([]Migration(nil), HubMigrations...), Migration{Version: 1, Description: "test:duplicate"})
+	if err := RunHub(db); err == nil || !strings.Contains(err.Error(), "must be greater") {
+		t.Fatalf("error=%v", err)
+	}
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='schema_migrations'`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("hub validation mutated database: tables=%d", count)
+	}
+}
 
 func TestExecStatementsFailure(t *testing.T) {
 	dir := t.TempDir()

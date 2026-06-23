@@ -61,12 +61,12 @@ type Failure struct {
 
 // ReuseDecision is the outcome of a reuse query.
 type ReuseDecision struct {
-	Decision      string           `json:"decision"`
-	Reason        string           `json:"reason"`
-	RunID         string           `json:"run_id,omitempty"`
-	RunStatus     string           `json:"run_status,omitempty"`
-	ChangedFiles  []ChangedFile    `json:"changed_files"`
-	FailedTests   []map[string]any `json:"failed_tests"`
+	Decision     string           `json:"decision"`
+	Reason       string           `json:"reason"`
+	RunID        string           `json:"run_id,omitempty"`
+	RunStatus    string           `json:"run_status,omitempty"`
+	ChangedFiles []ChangedFile    `json:"changed_files"`
+	FailedTests  []map[string]any `json:"failed_tests"`
 }
 
 // ChangedFile is a file change event or synthetic freshness row.
@@ -80,26 +80,26 @@ type ChangedFile struct {
 
 // QueryResult is the CLI-facing reuse query payload.
 type QueryResult struct {
-	Command         string        `json:"command"`
-	Scope           string        `json:"scope"`
-	Status          string        `json:"status"`
-	Fresh           bool          `json:"fresh"`
-	Reason          string        `json:"reason"`
-	RunID           string        `json:"run_id,omitempty"`
-	Decision        string        `json:"decision"`
-	ChangedFiles    []ChangedFile `json:"changed_files"`
+	Command         string           `json:"command"`
+	Scope           string           `json:"scope"`
+	Status          string           `json:"status"`
+	Fresh           bool             `json:"fresh"`
+	Reason          string           `json:"reason"`
+	RunID           string           `json:"run_id,omitempty"`
+	Decision        string           `json:"decision"`
+	ChangedFiles    []ChangedFile    `json:"changed_files"`
 	FailedTests     []map[string]any `json:"failed_tests"`
-	AutoInputs      bool          `json:"auto_inputs,omitempty"`
-	InputsCollected int           `json:"inputs_collected"`
+	AutoInputs      bool             `json:"auto_inputs,omitempty"`
+	InputsCollected int              `json:"inputs_collected"`
 }
 
 // ShowSummary is a compact run detail with reuse verdict.
 type ShowSummary struct {
-	Run         Run           `json:"run"`
-	Inputs      []Input       `json:"inputs"`
-	InputCount  int           `json:"input_count"`
-	Failures    []Failure     `json:"failures"`
-	Reuse       ReuseDecision `json:"reuse"`
+	Run        Run           `json:"run"`
+	Inputs     []Input       `json:"inputs"`
+	InputCount int           `json:"input_count"`
+	Failures   []Failure     `json:"failures"`
+	Reuse      ReuseDecision `json:"reuse"`
 }
 
 // RecordRun creates a new verification run.
@@ -194,9 +194,13 @@ func GetInputs(db *sql.DB, runID string) ([]Input, error) {
 	if err != nil {
 		return nil, err
 	}
+	return getInputsByExactRunID(db, id)
+}
+
+func getInputsByExactRunID(db *sql.DB, runID string) ([]Input, error) {
 	rows, err := db.Query(`
 		SELECT id, run_id, file_path, role, content_hash, created_at, model_id
-		FROM verification_inputs WHERE run_id=? ORDER BY file_path`, id)
+		FROM verification_inputs WHERE run_id=? ORDER BY file_path`, runID)
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +284,8 @@ func CollectInputsForScope(db *sql.DB, scope string) ([][3]string, error) {
 	seen := map[string]bool{}
 	var inputs [][3]string
 	for rows.Next() {
-		var path, hash string
+		var path string
+		var hash sql.NullString
 		if err := rows.Scan(&path, &hash); err != nil {
 			return nil, err
 		}
@@ -289,7 +294,7 @@ func CollectInputsForScope(db *sql.DB, scope string) ([][3]string, error) {
 		}
 		role := inferRoleFromPath(path)
 		if pathInScope(path, prefixes) || (includeBroad && broadScopeRoles[role]) {
-			inputs = append(inputs, [3]string{path, role, hash})
+			inputs = append(inputs, [3]string{path, role, hash.String})
 			seen[path] = true
 		}
 	}
@@ -299,6 +304,9 @@ func CollectInputsForScope(db *sql.DB, scope string) ([][3]string, error) {
 // EvaluateFreshness checks whether stored inputs still match repo_files.
 func EvaluateFreshness(db *sql.DB, runID string) (bool, string) {
 	inputs, err := GetInputs(db, runID)
+	if err != nil {
+		inputs, err = getInputsByExactRunID(db, runID)
+	}
 	if err != nil || len(inputs) == 0 {
 		return false, "no_inputs_stored"
 	}
@@ -306,22 +314,29 @@ func EvaluateFreshness(db *sql.DB, runID string) (bool, string) {
 	for _, in := range inputs {
 		stored[in.FilePath] = [2]string{in.Role, in.ContentHash}
 	}
-	run, _ := GetRun(db, runID)
+	run, err := GetRun(db, runID)
+	if err != nil {
+		run, err = getRunByExactID(db, runID)
+		if err != nil {
+			return false, "run_lookup_failed"
+		}
+	}
+	if run == nil {
+		return false, "run_missing"
+	}
 	cutoff := run.StartedAt
-	if run != nil && run.FinishedAt != "" {
+	if run.FinishedAt != "" {
 		cutoff = run.FinishedAt
 	}
 	fullRun := scopeIsFullRun("")
-	if run != nil {
-		fullRun = scopeIsFullRun(run.Scope)
-	}
+	fullRun = scopeIsFullRun(run.Scope)
 	for path, pair := range stored {
-		var currentHash string
+		var currentHash sql.NullString
 		err := db.QueryRow(`SELECT content_hash FROM repo_files WHERE path=?`, path).Scan(&currentHash)
 		if err == sql.ErrNoRows {
 			return false, "input_file_removed: " + path
 		}
-		if currentHash != pair[1] {
+		if currentHash.String != pair[1] {
 			return false, "input_hash_changed: " + path
 		}
 	}
@@ -342,6 +357,13 @@ func EvaluateFreshness(db *sql.DB, runID string) (bool, string) {
 		}
 	}
 	return true, "fresh"
+}
+
+func getRunByExactID(db *sql.DB, runID string) (*Run, error) {
+	row := db.QueryRow(`SELECT id, command, scope, status, git_sha, exit_code, COALESCE(output,''),
+		COALESCE(notes,''), started_at, COALESCE(finished_at,''), COALESCE(dismissed_at,''),
+		COALESCE(dismissed_reason,''), created_at, model_id FROM verification_runs WHERE id=?`, runID)
+	return scanRun(row)
 }
 
 // EvaluateReuse decides whether a prior passing run can be reused.
@@ -596,7 +618,7 @@ func parsePytestFailures(output string) []Failure {
 		}
 		out = append(out, Failure{
 			TestID: testID, FilePath: filePath,
-			Headline: strings.ToLower(kind) + " " + testID,
+			Headline:       strings.ToLower(kind) + " " + testID,
 			MessageExcerpt: excerpt, FailureKind: strings.ToLower(kind),
 		})
 	}

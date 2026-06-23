@@ -335,4 +335,20 @@ CREATE INDEX IF NOT EXISTS idx_commit_archeology_branch ON commit_archeology(bra
 `)
 		},
 	},
+	{
+		Version:     3,
+		Description: "go:plan item memory_ref",
+		Apply: func(tx *sql.Tx) error {
+			var exists int
+			if err := tx.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('plan_items') WHERE name='memory_ref'`).Scan(&exists); err != nil {
+				return err
+			}
+			if exists > 0 {
+				return nil
+			}
+			return execStatements(tx, `
+ALTER TABLE plan_items ADD COLUMN memory_ref TEXT;
+`)
+		},
+	},
 }

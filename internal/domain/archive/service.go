@@ -488,11 +488,11 @@ func archiveLocSnapshots(db *sql.DB, archivedAt, reason string, keep int) (int, 
 
 // Entry is a row in archive_entries.
 type Entry struct {
-	ID             string `json:"id"`
-	SourceTable    string `json:"source_table"`
-	SourceID       string `json:"source_id"`
-	ArchivedAt     string `json:"archived_at"`
-	ArchiveReason  string `json:"archive_reason,omitempty"`
+	ID            string `json:"id"`
+	SourceTable   string `json:"source_table"`
+	SourceID      string `json:"source_id"`
+	ArchivedAt    string `json:"archived_at"`
+	ArchiveReason string `json:"archive_reason,omitempty"`
 }
 
 // ListFilter selects archive entries.
@@ -653,9 +653,17 @@ func Restore(db *sql.DB, opt RestoreOptions) (RestoreResult, error) {
 			continue
 		}
 
+		allowedCols, err := restoreAllowedColumns(db, c.table)
+		if err != nil {
+			return res, err
+		}
+
 		cols := make([]string, 0, len(payload))
 		vals := make([]any, 0, len(payload))
 		for k, v := range payload {
+			if !allowedCols[k] {
+				return res, fmt.Errorf("invalid archived column %q for table %s", k, c.table)
+			}
 			cols = append(cols, k)
 			vals = append(vals, v)
 		}
@@ -693,6 +701,25 @@ func Restore(db *sql.DB, opt RestoreOptions) (RestoreResult, error) {
 		res.ArchiveEntriesDeleted = len(deletedIDs)
 	}
 	return res, nil
+}
+
+func restoreAllowedColumns(db *sql.DB, table string) (map[string]bool, error) {
+	exists, err := storage.TableExists(db, table)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, fmt.Errorf("invalid archived source table %q", table)
+	}
+	cols, err := storage.ColumnNames(db, table)
+	if err != nil {
+		return nil, err
+	}
+	allowed := make(map[string]bool, len(cols))
+	for _, col := range cols {
+		allowed[col] = true
+	}
+	return allowed, nil
 }
 
 func restoreLocSnapshot(db *sql.DB, payload map[string]any) (int, error) {
@@ -735,16 +762,16 @@ type GCOptions struct {
 
 // GCResult summarizes gc dry-run or execution.
 type GCResult struct {
-	FeedbackToClose      int `json:"feedback_to_close"`
-	FindingsToWontfix    int `json:"findings_to_wontfix"`
-	RemindersToArchive   int `json:"reminders_to_archive"`
-	TasksToArchive       int `json:"tasks_to_archive"`
-	StaleArchNotes       int `json:"stale_arch_notes"`
-	OlderThanDays        int `json:"older_than_days"`
-	FeedbackClosed       int `json:"feedback_closed,omitempty"`
-	FindingsResolved     int `json:"findings_resolved,omitempty"`
-	RemindersArchived    int `json:"reminders_archived,omitempty"`
-	TasksArchived        int `json:"tasks_archived,omitempty"`
+	FeedbackToClose    int `json:"feedback_to_close"`
+	FindingsToWontfix  int `json:"findings_to_wontfix"`
+	RemindersToArchive int `json:"reminders_to_archive"`
+	TasksToArchive     int `json:"tasks_to_archive"`
+	StaleArchNotes     int `json:"stale_arch_notes"`
+	OlderThanDays      int `json:"older_than_days"`
+	FeedbackClosed     int `json:"feedback_closed,omitempty"`
+	FindingsResolved   int `json:"findings_resolved,omitempty"`
+	RemindersArchived  int `json:"reminders_archived,omitempty"`
+	TasksArchived      int `json:"tasks_archived,omitempty"`
 }
 
 // GC prunes stale open feedback, missing-file findings, and old dismissed reminders/tasks.

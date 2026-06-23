@@ -438,9 +438,6 @@ func cmdVerifyRecord(open opener) *cobra.Command {
 			if gitSHA == "" {
 				gitSHA = git.HeadSHA(ctx.Project.RepoRoot)
 			}
-			if gitSHA == "" {
-				return usageError("--git-sha required when not in a git repo")
-			}
 			if status == "" {
 				status = "pending"
 			}

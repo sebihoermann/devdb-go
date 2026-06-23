@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/sebihoermann/devdb-go/internal/app"
+	"github.com/sebihoermann/devdb-go/internal/migrate"
 	"github.com/sebihoermann/devdb-go/internal/storage"
 )
 
@@ -359,6 +360,17 @@ func TestRequireDBRunsMigrationsOnOpenDB(t *testing.T) {
 	dbPath := filepath.Join(dir, "partial.db")
 	db, err := storage.Open(dbPath)
 	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := migrate.SourceMigrations[0].Apply(tx); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(`CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL, description TEXT NOT NULL)`); err != nil {
