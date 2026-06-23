@@ -57,6 +57,9 @@ func TestListItemsShowItemAndInFlight(t *testing.T) {
 	if err != nil || len(items) != 1 {
 		t.Fatalf("items=%d err=%v", len(items), err)
 	}
+	if items[0].MemoryRef != "MEMORY.md#task" {
+		t.Fatalf("list memory_ref=%q", items[0].MemoryRef)
+	}
 	show, acc, err := planning.ShowItem(db, itemID[:8])
 	if err != nil || show.ID != itemID {
 		t.Fatalf("show=%+v err=%v", show, err)

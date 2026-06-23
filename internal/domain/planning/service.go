@@ -133,21 +133,26 @@ func AddAcceptance(db *sql.DB, planItemID, criterion, modelID string, ordinal in
 }
 
 // SetItemStatus updates plan item status and logs it.
+// Both writes run inside a single transaction; if the audit-log insert fails,
+// the status update is rolled back so the item cannot end up with a status
+// change that has no matching status_log row.
 func SetItemStatus(db *sql.DB, itemID, status, note, modelID string) error {
 	now := storage.NowUTC()
-	if _, err := db.Exec(`UPDATE plan_items SET status=? WHERE id=?`, status, itemID); err != nil {
+	return storage.WithTx(db, func(tx *sql.Tx) error {
+		if _, err := tx.Exec(`UPDATE plan_items SET status=? WHERE id=?`, status, itemID); err != nil {
+			return err
+		}
+		logID, err := storage.NewID()
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(`
+			INSERT INTO status_log(id, plan_item_id, status, note, created_at, model_id)
+			VALUES (?, ?, ?, ?, ?, ?)`,
+			logID, itemID, status, nullStr(note), now, modelID,
+		)
 		return err
-	}
-	logID, err := storage.NewID()
-	if err != nil {
-		return err
-	}
-	_, err = db.Exec(`
-		INSERT INTO status_log(id, plan_item_id, status, note, created_at, model_id)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		logID, itemID, status, nullStr(note), now, modelID,
-	)
-	return err
+	})
 }
 
 // StartItem marks a plan item in progress.
@@ -165,7 +170,7 @@ func StartItem(db *sql.DB, idPrefix, modelID string) (string, error) {
 // PauseItem marks in-progress work paused with a required note.
 func PauseItem(db *sql.DB, idPrefix, note, modelID string) (string, error) {
 	if strings.TrimSpace(note) == "" {
-		return "", fmt.Errorf("--note is required on pause")
+		return "", ErrNoteRequired
 	}
 	id, err := resolveItemID(db, idPrefix)
 	if err != nil {
@@ -468,7 +473,7 @@ type ItemFilter struct {
 func ListItems(db *sql.DB, f ItemFilter) ([]PlanItem, error) {
 	q := `SELECT id, COALESCE(plan_id,''), COALESCE(milestone_id,''), COALESCE(item_number,0),
 	      title, COALESCE(body,''), status, approval_status, created_at,
-	      COALESCE(phase,''), COALESCE(step,'')
+	      COALESCE(phase,''), COALESCE(step,''), COALESCE(memory_ref,'')
 	      FROM plan_items WHERE 1=1`
 	args := []any{}
 	if f.LegacyOnly {
@@ -499,7 +504,7 @@ func ListItems(db *sql.DB, f ItemFilter) ([]PlanItem, error) {
 	for rows.Next() {
 		var p PlanItem
 		if err := rows.Scan(&p.ID, &p.PlanID, &p.MilestoneID, &p.ItemNumber, &p.Title, &p.Body,
-			&p.Status, &p.Approval, &p.CreatedAt, &p.Phase, &p.Step); err != nil {
+			&p.Status, &p.Approval, &p.CreatedAt, &p.Phase, &p.Step, &p.MemoryRef); err != nil {
 			return nil, err
 		}
 		out = append(out, p)
