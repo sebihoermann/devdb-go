@@ -45,7 +45,7 @@ type ListFilter struct {
 // ValidateTopic checks topic naming rules.
 func ValidateTopic(topic string) error {
 	if !topicRE.MatchString(topic) || bannedTopics[topic] {
-		return fmt.Errorf("invalid topic")
+		return ErrInvalidTopic
 	}
 	return nil
 }
@@ -150,14 +150,14 @@ func VerifyAll(db *sql.DB) (VerifyAllResult, error) {
 func Verify(db *sql.DB, idPrefix string) (status string, ok bool, id string, err error) {
 	id, err = resolveNoteID(db, idPrefix)
 	if err != nil {
-		return "", false, "", err
+		return "", false, "", fmt.Errorf("%w: %s", ErrNoteNotFound, idPrefix)
 	}
 	note, err := Get(db, id)
 	if err != nil {
 		return "", false, id, err
 	}
 	if note == nil {
-		return "", false, id, fmt.Errorf("note not found")
+		return "", false, id, ErrNoteNotFound
 	}
 	if note.Stale {
 		return "stale", false, id, nil
@@ -297,7 +297,7 @@ func sourceSnapshot(db *sql.DB, sourcePaths []string) (map[string]string, error)
 		var hash sql.NullString
 		err := db.QueryRow(`SELECT content_hash FROM repo_files WHERE path=?`, p).Scan(&hash)
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("missing source path: %s", p)
+			return nil, &MissingSourceError{Path: p}
 		}
 		if err != nil {
 			return nil, err
@@ -407,13 +407,4 @@ func sortedKeys(m map[string][]Note) []string {
 	}
 	sort.Strings(keys)
 	return keys
-}
-
-// MissingSourceError indicates a source path is not in repo_files.
-type MissingSourceError struct {
-	Path string
-}
-
-func (e *MissingSourceError) Error() string {
-	return "missing source path: " + e.Path
 }
