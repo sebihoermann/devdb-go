@@ -3,7 +3,10 @@ package storage
 import (
 	"database/sql"
 	"fmt"
+	"regexp"
 )
+
+var sqliteIdentifierRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 // SchemaKind distinguishes Go-native vs legacy Python databases.
 type SchemaKind string
@@ -36,7 +39,10 @@ func DetectSchema(db *sql.DB) (SchemaKind, int, error) {
 	}
 	if hasGoMarker > 0 {
 		var version int
-		_ = db.QueryRow(`SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&version)
+		err = db.QueryRow(`SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&version)
+		if err != nil {
+			return SchemaUnknown, 0, err
+		}
 		return SchemaGo, version, nil
 	}
 
@@ -71,6 +77,9 @@ func AppendLimit(query string, args []any, limit int) (string, []any) {
 
 // ColumnNames returns column names for a table.
 func ColumnNames(db *sql.DB, table string) ([]string, error) {
+	if !sqliteIdentifierRE.MatchString(table) {
+		return nil, fmt.Errorf("invalid table identifier %q", table)
+	}
 	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
 	if err != nil {
 		return nil, err

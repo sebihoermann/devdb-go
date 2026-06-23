@@ -32,12 +32,14 @@ func coerceCLIError(err error) *CLIError {
 	if ce, ok := err.(*CLIError); ok {
 		return ce
 	}
-	if strings.Contains(err.Error(), "unknown command") {
+	msg := err.Error()
+	if strings.HasPrefix(msg, "unknown command ") || strings.HasPrefix(msg, "unknown command:") ||
+		strings.HasPrefix(msg, "unknown shorthand flag") {
 		ce := unknownCommandError(unknownCommandArgv())
-		ce.Message = err.Error()
+		ce.Message = msg
 		return ce
 	}
-	return &CLIError{Code: ExitGeneral, Message: err.Error(), Kind: "cli_error"}
+	return &CLIError{Code: ExitGeneral, Message: msg, Kind: "cli_error"}
 }
 
 func unknownCommandArgv() []string {
@@ -348,44 +350,44 @@ func cmdDoctor(open opener) *cobra.Command {
 	}
 	doc.AddCommand(cmdDoctorHygiene(open))
 	doc.RunE = func(cmd *cobra.Command, args []string) error {
-			ctx, err := open(cmd)
-			if err != nil {
-				return err
-			}
-			defer ctx.Close()
-			result := map[string]any{
-				"repo_root": ctx.Project.RepoRoot,
-				"db_path":   ctx.Project.DBPath,
-			}
-			if _, err := os.Stat(ctx.Project.DBPath); os.IsNotExist(err) {
-				result["db_status"] = "missing"
-				if ctx.Out.JSON {
-					return ctx.Out.PrintData(result)
-				}
-				return ctx.Out.PrintData("database missing — run devdb init")
-			}
-			if err := ctx.RequireDB(); err != nil {
-				result["db_status"] = "error"
-				result["error"] = err.Error()
-				if ctx.Out.JSON {
-					return ctx.Out.PrintData(result)
-				}
-				return fmt.Errorf("%s", err.Error())
-			}
-			kind, ver, _ := storage.DetectSchema(ctx.DB)
-			result["schema_kind"] = kind
-			result["schema_version"] = ver
-			result["db_status"] = "ok"
+		ctx, err := open(cmd)
+		if err != nil {
+			return err
+		}
+		defer ctx.Close()
+		result := map[string]any{
+			"repo_root": ctx.Project.RepoRoot,
+			"db_path":   ctx.Project.DBPath,
+		}
+		if _, err := os.Stat(ctx.Project.DBPath); os.IsNotExist(err) {
+			result["db_status"] = "missing"
 			if ctx.Out.JSON {
 				return ctx.Out.PrintData(result)
 			}
-			return ctx.Out.PrintData(output.HumanLines{Lines: []string{
-				"doctor: ok",
-				fmt.Sprintf("schema: %s v%d", kind, ver),
-				fmt.Sprintf("db: %s", ctx.Project.DBPath),
-				"hygiene: devdb doctor hygiene",
-			}})
+			return ctx.Out.PrintData("database missing — run devdb init")
 		}
+		if err := ctx.RequireDB(); err != nil {
+			result["db_status"] = "error"
+			result["error"] = err.Error()
+			if ctx.Out.JSON {
+				return ctx.Out.PrintData(result)
+			}
+			return fmt.Errorf("%s", err.Error())
+		}
+		kind, ver, _ := storage.DetectSchema(ctx.DB)
+		result["schema_kind"] = kind
+		result["schema_version"] = ver
+		result["db_status"] = "ok"
+		if ctx.Out.JSON {
+			return ctx.Out.PrintData(result)
+		}
+		return ctx.Out.PrintData(output.HumanLines{Lines: []string{
+			"doctor: ok",
+			fmt.Sprintf("schema: %s v%d", kind, ver),
+			fmt.Sprintf("db: %s", ctx.Project.DBPath),
+			"hygiene: devdb doctor hygiene",
+		}})
+	}
 	return doc
 }
 
@@ -707,7 +709,10 @@ func cmdPlanItemStart(open opener) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			item, acc, _ := planning.ShowItem(ctx.DB, id)
+			item, acc, err := planning.ShowItem(ctx.DB, id)
+			if err != nil {
+				return err
+			}
 			for _, a := range acc {
 				if a.Status == "open" {
 					ctx.Out.Hint("unmet: [%s] %s", a.ID[:8], a.Criterion)

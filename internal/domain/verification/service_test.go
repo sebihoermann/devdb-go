@@ -154,6 +154,30 @@ func TestEvaluateFreshnessNoInputs(t *testing.T) {
 	}
 }
 
+func TestEvaluateFreshnessMissingRun(t *testing.T) {
+	db, _ := testutil.TempDB(t)
+	if _, err := db.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if _, err := db.Exec(`INSERT INTO verification_inputs(id, run_id, file_path, role, content_hash, created_at, model_id)
+		VALUES ('missing-input', 'missing-run', 'main.go', 'source', 'hash', datetime('now'), 'test')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO repo_files(path, kind, content_hash, last_seen_at)
+		VALUES ('main.go', 'go', 'hash', datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
+	fresh, reason := verification.EvaluateFreshness(db, "missing-run")
+	if fresh || reason != "run_missing" {
+		t.Fatalf("fresh=%v reason=%q", fresh, reason)
+	}
+}
+
 func TestFailedLastTimeReuse(t *testing.T) {
 	db, _ := testutil.TempDB(t)
 	exit := 1
@@ -192,6 +216,32 @@ func TestScopedInputsCollect(t *testing.T) {
 	full, err := verification.CollectInputsForScope(db, ".")
 	if err != nil || len(full) < 3 {
 		t.Fatalf("full inputs=%d err=%v", len(full), err)
+	}
+}
+
+func TestInputsWithNullContentHash(t *testing.T) {
+	db, _ := testutil.TempDB(t)
+	if _, err := db.Exec(`INSERT INTO repo_files(path, kind, content_hash, last_seen_at)
+		VALUES ('generated', 'other', NULL, datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
+	inputs, err := verification.CollectInputsForScope(db, ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(inputs) != 1 || inputs[0] != [3]string{"generated", "source", ""} {
+		t.Fatalf("inputs=%v", inputs)
+	}
+	exit := 0
+	runID, err := verification.RecordRun(db, "generate", ".", "", "passed", &exit, "", "", "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := verification.AddInputs(db, runID, inputs, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if fresh, reason := verification.EvaluateFreshness(db, runID); !fresh {
+		t.Fatalf("fresh=%v reason=%s", fresh, reason)
 	}
 }
 
