@@ -7,6 +7,11 @@ Queryable per-project memory for humans and AI agents working on a codebase toge
 
 Each project keeps one SQLite file at `.devdb/development.db`. The `devdb` CLI is the write and read surface — goals, plans, feedback, architecture notes, review findings, and verification state survive sessions and model swaps.
 
+Provider integrations are optional adapters over that file-backed core. They do
+not replace SQLite or require a remote synchronization service. See
+[OpenClaw integration](docs/integrations/openclaw.md) for the first adapter
+contract.
+
 The legacy Python prototype lives in [sebihoermann/devdb](https://github.com/sebihoermann/devdb) under `archive/python/`.
 
 ## Install
@@ -23,6 +28,12 @@ From a checkout:
 git clone https://github.com/sebihoermann/devdb-go
 cd devdb-go
 go install ./cmd/devdb
+```
+
+Install the optional OpenClaw memory adapter separately:
+
+```bash
+go install github.com/sebihoermann/devdb-go/cmd/devdb-openclaw@latest
 ```
 
 ## Quick start
@@ -85,6 +96,7 @@ ln -sfn /path/to/devdb-go/skills/devdb ~/.codex/skills/devdb
 
 ```text
 cmd/devdb/     — CLI entrypoint
+cmd/devdb-openclaw/ — optional OpenClaw memory adapter
 internal/      — domain services, storage, migrations
 skills/devdb/  — agent skill (SKILL.md, SPEC.md)
 docs/          — parity matrix, installation model, hub sync notes
