@@ -285,6 +285,20 @@ Staleness is derived from source file content hashes. `arch list --stale` surfac
 
 Rules: topic is kebab-case, 3–40 chars; body is 2–5 sentences; name files, do not paste code; source paths must exist in `repo_files` (run `inventory scan` first).
 
+### `arch add` failure modes
+
+Two errors are common when adding an architecture note. Both now print actionable remediation:
+
+- **Invalid topic.** The grammar is `^[a-z][a-z0-9-]{2,40}$` and a small banned list (`misc`, `general`, `notes`, `stuff`, `improvements`) is enforced. A rejected topic returns exit `5` with the offending input echoed, the specific reason (empty / too short / too long / banned / must start with a lowercase letter / contains uppercase letters, spaces, etc.), and `example: ssh-log-analyzer`. Natural-language titles from `plan create` are not accepted as arch topics — the topic is an identifier used as a render heading.
+- **Source path not in inventory.** `arch add` validates each `--source` before inserting:
+  - Indexed in `repo_files` → accepted, `source_hashes` captured.
+  - Exists on disk but **not** indexed → exit `5` with `unindexed source path: <PATH>; file exists at <REPO_ROOT>/<PATH> but is not in repo_files inventory; run: devdb inventory scan`. The CLI also prints `try: devdb inventory scan` so the agent can refresh and retry without guessing.
+  - Absent from disk and inventory → exit `3` with `missing source path: <PATH>`.
+
+Run `devdb inventory scan` before the first `arch add` of a session — fresh code that has never been scanned will hit the unindexed branch for every source path. The scan is idempotent and cheap.
+
+`arch update` runs the same source validation when `--source` is supplied.
+
 ## Playbook 3: Code review
 
 ```bash
@@ -334,6 +348,12 @@ devdb verify dismiss <run_id> --reason "..."
 After `inventory scan`, `verify query` and `verify record` auto-collect inputs from `repo_files` when `--inputs` is omitted.
 
 **When in doubt:** Rerun. Log the decision as feedback if the pattern is worth remembering.
+
+### Write concurrency and `SQLITE_BUSY`
+
+`devdb` opens the project database with `MaxOpenConns(1)` and applies `PRAGMA busy_timeout = 5000` so single-process writes are serialized at the connection level. **Transient `SQLITE_BUSY` and `SQLITE_LOCKED` errors during PRAGMA setup or transaction commit are retried automatically with bounded exponential backoff** (six attempts, 50ms → 500ms). Non-lock errors (constraint violations, syntax errors, etc.) propagate immediately without retry.
+
+You should rarely see `database is locked` from a devdb write. If you do, the error message includes `storage: SQLITE_BUSY after N attempts:` — that means the lock persisted past the retry budget, and the next step is to check for a hung external process holding the database file (e.g., a long-running `sqlite3` REPL or a parallel `devdb` invocation that crashed mid-write). Record it as feedback (`feedback add --role codebase --category reliability`) rather than retrying blindly.
 
 ## Playbook 6: Reminders
 
