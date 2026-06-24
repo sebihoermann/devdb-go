@@ -275,16 +275,15 @@ func cmdArchAdd(open opener) *cobra.Command {
 			if len(sources) == 0 {
 				return usageError("at least one --source is required")
 			}
+			if err := architecture.ValidateSourcePaths(ctx.DB, ctx.Project.RepoRoot, sources); err != nil {
+				return archSourcePathError(err)
+			}
 			id, err := architecture.Add(ctx.DB, args[0], body, sources, confidence, ctx.ModelID)
 			if err != nil {
 				if errors.Is(err, architecture.ErrInvalidTopic) {
 					return &CLIError{Code: ExitInvalidValue, Message: err.Error(), Kind: "invalid_topic"}
 				}
-				var missingSource *architecture.MissingSourceError
-				if errors.As(err, &missingSource) {
-					return &CLIError{Code: ExitNotFound, Message: err.Error(), Kind: "missing_source"}
-				}
-				return err
+				return archSourcePathError(err)
 			}
 			return ctx.Out.WriteResult(id, map[string]any{"kind": "architecture_note"})
 		},
@@ -293,6 +292,26 @@ func cmdArchAdd(open opener) *cobra.Command {
 	c.Flags().StringSliceVar(&sources, "source", nil, "source file path (repeatable)")
 	c.Flags().StringVar(&confidence, "confidence", "medium", "high|medium|low")
 	return c
+}
+
+// archSourcePathError maps architecture-package source-path errors into the
+// CLI error envelope. Unindexed paths surface as an actionable inventory
+// hint; truly missing paths surface as a not-found error.
+func archSourcePathError(err error) error {
+	var unindexed *architecture.UnindexedSourceError
+	if errors.As(err, &unindexed) {
+		return &CLIError{
+			Code:       ExitInvalidValue,
+			Message:    err.Error(),
+			Suggestion: "devdb inventory scan",
+			Kind:       "unindexed_source",
+		}
+	}
+	var missingSource *architecture.MissingSourceError
+	if errors.As(err, &missingSource) {
+		return &CLIError{Code: ExitNotFound, Message: err.Error(), Kind: "missing_source"}
+	}
+	return err
 }
 
 func cmdArchList(open opener) *cobra.Command {
@@ -379,13 +398,14 @@ func cmdArchUpdate(open opener) *cobra.Command {
 			if len(sources) > 0 {
 				srcSlice = sources
 			}
+			if len(srcSlice) > 0 {
+				if err := architecture.ValidateSourcePaths(ctx.DB, ctx.Project.RepoRoot, srcSlice); err != nil {
+					return archSourcePathError(err)
+				}
+			}
 			id, ok, err := architecture.Update(ctx.DB, args[0], bodyPtr, srcSlice, confPtr)
 			if err != nil {
-				var missingSource *architecture.MissingSourceError
-				if errors.As(err, &missingSource) {
-					return &CLIError{Code: ExitNotFound, Message: err.Error(), Kind: "missing_source"}
-				}
-				return err
+				return archSourcePathError(err)
 			}
 			if !ok {
 				return notFoundError("note not found")

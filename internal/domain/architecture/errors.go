@@ -3,6 +3,7 @@ package architecture
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 )
 
@@ -23,6 +24,13 @@ var (
 	// not present in repo_files. Callers should use errors.As with
 	// *MissingSourceError when they need the specific path.
 	ErrMissingSource = errors.New("missing source path")
+
+	// ErrUnindexedSource indicates one of the supplied source paths
+	// exists on disk but is not present in the repo_files inventory.
+	// The inventory is stale or missing; running `devdb inventory scan`
+	// will rebuild it. Callers can match with errors.Is; use errors.As
+	// with *UnindexedSourceError to recover the offending path.
+	ErrUnindexedSource = errors.New("unindexed source path")
 )
 
 // MissingSourceError is the typed error returned for missing source paths.
@@ -39,6 +47,34 @@ func (e *MissingSourceError) Error() string {
 // errors.Is. The structured path lives on the receiver.
 func (e *MissingSourceError) Is(target error) bool {
 	return target == ErrMissingSource
+}
+
+// UnindexedSourceError signals that a source path exists on disk but is not
+// present in the repo_files inventory. This usually means the inventory is
+// stale; running `devdb inventory scan` rebuilds it. Callers can extract the
+// offending path and the repo root via errors.As.
+type UnindexedSourceError struct {
+	Path     string
+	RepoRoot string
+}
+
+func (e *UnindexedSourceError) Error() string {
+	if e.RepoRoot != "" {
+		return fmt.Sprintf(
+			"unindexed source path: %s\nfile exists at %s but is not in repo_files inventory; run: devdb inventory scan",
+			e.Path, filepath.Join(e.RepoRoot, e.Path),
+		)
+	}
+	return fmt.Sprintf(
+		"unindexed source path: %s\nfile exists on disk but is not in repo_files inventory; run: devdb inventory scan",
+		e.Path,
+	)
+}
+
+// Is reports whether target is ErrUnindexedSource so callers can match with
+// errors.Is.
+func (e *UnindexedSourceError) Is(target error) bool {
+	return target == ErrUnindexedSource
 }
 
 // InvalidTopicError carries the offending topic and the specific reason it

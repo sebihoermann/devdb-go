@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -289,6 +291,38 @@ func RenderMarkdown(db *sql.DB) (string, error) {
 		out += "\n"
 	}
 	return out, nil
+}
+
+// ValidateSourcePaths checks each candidate source path against the
+// repo_files inventory and, when the inventory has no row, against the
+// filesystem rooted at repoRoot. Indexed paths return nil; filesystem
+// matches with no inventory row produce an *UnindexedSourceError naming
+// the remediation command; paths absent from both produce a
+// *MissingSourceError. Callers should run this before Add/Update so users
+// get actionable feedback instead of a bare "missing source path".
+//
+// repoRoot may be empty, in which case filesystem checks are skipped and
+// any path missing from the inventory produces a *MissingSourceError.
+func ValidateSourcePaths(db *sql.DB, repoRoot string, sourcePaths []string) error {
+	for _, p := range sourcePaths {
+		var hash sql.NullString
+		err := db.QueryRow(`SELECT content_hash FROM repo_files WHERE path=?`, p).Scan(&hash)
+		if err == nil {
+			continue
+		}
+		if err != sql.ErrNoRows {
+			return err
+		}
+		if repoRoot == "" {
+			return &MissingSourceError{Path: p}
+		}
+		abs := filepath.Join(repoRoot, p)
+		if _, statErr := os.Stat(abs); statErr == nil {
+			return &UnindexedSourceError{Path: p, RepoRoot: repoRoot}
+		}
+		return &MissingSourceError{Path: p}
+	}
+	return nil
 }
 
 func sourceSnapshot(db *sql.DB, sourcePaths []string) (map[string]string, error) {

@@ -2,6 +2,8 @@ package architecture_test
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -123,4 +125,111 @@ func TestInvalidTopicErrorIsActionable(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestValidateSourcePathsInventoryAware verifies that source-path validation
+// distinguishes (a) paths indexed in repo_files, (b) paths that exist on disk
+// but are not indexed, and (c) paths that are absent from both. Regression for
+// feedback 90afa468.
+func TestValidateSourcePathsInventoryAware(t *testing.T) {
+	db, dbPath := testutil.TempDB(t)
+	repoRoot := filepath.Dir(dbPath)
+
+	// Index one path; write one unindexed file to disk; reference one
+	// path that is absent from both.
+	indexed := "src/indexed.go"
+	if _, err := db.Exec(`INSERT INTO repo_files(path, kind, content_hash, last_seen_at) VALUES (?, 'code', 'h', datetime('now'))`, indexed); err != nil {
+		t.Fatal(err)
+	}
+	unindexed := "src/unindexed.py"
+	if err := os.MkdirAll(filepath.Join(repoRoot, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoRoot, unindexed), []byte("print('hi')\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ghost := "src/does-not-exist.py"
+
+	t.Run("indexed path passes", func(t *testing.T) {
+		if err := architecture.ValidateSourcePaths(db, repoRoot, []string{indexed}); err != nil {
+			t.Fatalf("expected nil for indexed path, got %v", err)
+		}
+	})
+
+	t.Run("existing-but-unindexed path produces UnindexedSourceError", func(t *testing.T) {
+		err := architecture.ValidateSourcePaths(db, repoRoot, []string{unindexed})
+		if err == nil {
+			t.Fatal("expected unindexed-source error")
+		}
+		if !errors.Is(err, architecture.ErrUnindexedSource) {
+			t.Fatalf("err=%v does not match ErrUnindexedSource", err)
+		}
+		var ue *architecture.UnindexedSourceError
+		if !errors.As(err, &ue) {
+			t.Fatalf("err=%v does not unwrap to *UnindexedSourceError", err)
+		}
+		if ue.Path != unindexed {
+			t.Fatalf("path=%q want %q", ue.Path, unindexed)
+		}
+		if ue.RepoRoot != repoRoot {
+			t.Fatalf("repoRoot=%q want %q", ue.RepoRoot, repoRoot)
+		}
+		msg := err.Error()
+		for _, fragment := range []string{unindexed, "inventory", "devdb inventory scan"} {
+			if !strings.Contains(msg, fragment) {
+				t.Errorf("error message missing %q\nfull: %s", fragment, msg)
+			}
+		}
+	})
+
+	t.Run("truly missing path produces MissingSourceError", func(t *testing.T) {
+		err := architecture.ValidateSourcePaths(db, repoRoot, []string{ghost})
+		if err == nil {
+			t.Fatal("expected missing-source error")
+		}
+		if !errors.Is(err, architecture.ErrMissingSource) {
+			t.Fatalf("err=%v does not match ErrMissingSource", err)
+		}
+		var me *architecture.MissingSourceError
+		if !errors.As(err, &me) {
+			t.Fatalf("err=%v does not unwrap to *MissingSourceError", err)
+		}
+		if me.Path != ghost {
+			t.Fatalf("path=%q want %q", me.Path, ghost)
+		}
+	})
+
+	t.Run("mixed list short-circuits at first bad path", func(t *testing.T) {
+		err := architecture.ValidateSourcePaths(db, repoRoot, []string{indexed, ghost, unindexed})
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		var me *architecture.MissingSourceError
+		if !errors.As(err, &me) || me.Path != ghost {
+			t.Fatalf("expected first-fail on %q, got %v", ghost, err)
+		}
+	})
+
+	t.Run("empty repoRoot skips filesystem check", func(t *testing.T) {
+		err := architecture.ValidateSourcePaths(db, "", []string{unindexed})
+		if err == nil {
+			t.Fatal("expected missing-source error when repoRoot is empty")
+		}
+		var me *architecture.MissingSourceError
+		if !errors.As(err, &me) {
+			t.Fatalf("err=%v does not unwrap to *MissingSourceError", err)
+		}
+	})
+}
+
+// TestUnindexedSourceErrorMessageWithoutRepoRoot covers the edge case where
+// callers omit the repo root but still want a useful error.
+func TestUnindexedSourceErrorMessageWithoutRepoRoot(t *testing.T) {
+	err := &architecture.UnindexedSourceError{Path: "src/foo.go"}
+	msg := err.Error()
+	for _, fragment := range []string{"src/foo.go", "inventory", "devdb inventory scan"} {
+		if !strings.Contains(msg, fragment) {
+			t.Errorf("message missing %q\nfull: %s", fragment, msg)
+		}
+	}
 }
