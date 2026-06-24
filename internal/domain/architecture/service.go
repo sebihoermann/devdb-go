@@ -45,7 +45,7 @@ type ListFilter struct {
 // ValidateTopic checks topic naming rules.
 func ValidateTopic(topic string) error {
 	if !topicRE.MatchString(topic) || bannedTopics[topic] {
-		return ErrInvalidTopic
+		return &InvalidTopicError{Topic: topic, Reason: topicReason(topic)}
 	}
 	return nil
 }
