@@ -93,4 +93,42 @@ func TestSentinelErrorsMatchWrapping(t *testing.T) {
 			t.Fatalf("err=%v does not match ErrNoteRequired", err)
 		}
 	})
+
+	// Regression for feedback ad7073e8: PauseItem used to silently flip a
+	// 'planned' item to 'in_progress', contaminating the next session's
+	// resume. Pause must now require an explicit StartItem first.
+	t.Run("ErrItemNotInProgress when pausing a planned item", func(t *testing.T) {
+		db, _ := testutil.TempDB(t)
+		planID, _ := planning.CreatePlan(db, planning.CreatePlanInput{Slug: "p", Title: "P", ModelID: "test"})
+		itemID, _ := planning.AddItem(db, planning.AddItemInput{PlanID: planID, Title: "task", ModelID: "test"})
+		_, err := planning.PauseItem(db, itemID, "save context", "test")
+		if err == nil {
+			t.Fatal("expected pause rejection on planned item")
+		}
+		if !errors.Is(err, planning.ErrItemNotInProgress) {
+			t.Fatalf("err=%v does not wrap ErrItemNotInProgress", err)
+		}
+		if !strings.Contains(err.Error(), "planned") {
+			t.Fatalf("err=%v should mention the current status", err)
+		}
+		var status string
+		if err := db.QueryRow(`SELECT status FROM plan_items WHERE id=?`, itemID).Scan(&status); err != nil {
+			t.Fatal(err)
+		}
+		if status != "planned" {
+			t.Fatalf("plan item status flipped to %q after rejected pause", status)
+		}
+	})
+
+	t.Run("PauseItem succeeds after StartItem", func(t *testing.T) {
+		db, _ := testutil.TempDB(t)
+		planID, _ := planning.CreatePlan(db, planning.CreatePlanInput{Slug: "p", Title: "P", ModelID: "test"})
+		itemID, _ := planning.AddItem(db, planning.AddItemInput{PlanID: planID, Title: "task", ModelID: "test"})
+		if _, err := planning.StartItem(db, itemID, "test"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := planning.PauseItem(db, itemID, "save context", "test"); err != nil {
+			t.Fatalf("pause after start should succeed, got %v", err)
+		}
+	})
 }

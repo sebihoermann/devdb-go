@@ -28,4 +28,11 @@ var (
 	// ErrMilestoneNotFound indicates a milestone lookup by id prefix or
 	// numeric reference returned no matching row.
 	ErrMilestoneNotFound = errors.New("milestone not found")
+
+	// ErrItemNotInProgress indicates PauseItem was called on a plan item
+	// whose current status is not in_progress. Per the documented workflow
+	// bracket (plan item start → plan item pause), callers must start the
+	// item before pausing it; this sentinel lets agents detect the
+	// rejected transition with errors.Is instead of substring matching.
+	ErrItemNotInProgress = errors.New("plan item is not in_progress; call 'devdb plan item start' before 'devdb plan item pause'")
 )

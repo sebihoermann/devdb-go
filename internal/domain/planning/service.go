@@ -168,6 +168,8 @@ func StartItem(db *sql.DB, idPrefix, modelID string) (string, error) {
 }
 
 // PauseItem marks in-progress work paused with a required note.
+// Rejects items whose current status is not in_progress; callers must
+// run StartItem first per the documented workflow bracket.
 func PauseItem(db *sql.DB, idPrefix, note, modelID string) (string, error) {
 	if strings.TrimSpace(note) == "" {
 		return "", ErrNoteRequired
@@ -175,6 +177,13 @@ func PauseItem(db *sql.DB, idPrefix, note, modelID string) (string, error) {
 	id, err := resolveItemID(db, idPrefix)
 	if err != nil {
 		return "", err
+	}
+	var current string
+	if err := db.QueryRow(`SELECT status FROM plan_items WHERE id=?`, id).Scan(&current); err != nil {
+		return "", fmt.Errorf("load plan item status: %w", err)
+	}
+	if current != "in_progress" {
+		return "", fmt.Errorf("%w (current status: %s)", ErrItemNotInProgress, current)
 	}
 	if err := SetItemStatus(db, id, "in_progress", "paused: "+note, modelID); err != nil {
 		return "", err
