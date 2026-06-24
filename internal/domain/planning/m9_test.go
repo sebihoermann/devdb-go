@@ -110,8 +110,25 @@ func TestReconcilePlanTreeDrift(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if !drift.IsEmpty() {
+		t.Fatalf("auto-cascade should leave no drift after close; got %+v", drift)
+	}
+
+	// Manually rewind milestone + plan to introduce drift, then verify
+	// reconcile still repairs it as a safety net for any path that bypassed
+	// CloseItem (legacy items, direct DB writes, etc.).
+	if _, err := db.Exec(`UPDATE milestones SET status='planned' WHERE id=?`, msID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE plans SET status='active' WHERE id=?`, planID); err != nil {
+		t.Fatal(err)
+	}
+	drift, err = planning.FindPlanTreeDrift(db, "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if drift.IsEmpty() {
-		t.Fatal("expected drift when child is done but milestone/plan still planned")
+		t.Fatal("expected drift after manually rewinding milestone/plan status")
 	}
 
 	result, err := planning.ReconcilePlans(db, "drift", true)

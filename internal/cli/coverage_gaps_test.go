@@ -257,6 +257,142 @@ func TestHelpDispatchesToSubcommand(t *testing.T) {
 	}
 }
 
+// TestListJSONReturnsEmptyArrayNotNull verifies the JSON stability
+// contract from feedback [654b7b3e]: list-style --json commands must emit
+// `[]` on an empty .devdb, never `null`. Agents parsing devdb JSON
+// iterate the result, so the array shape is the contract.
+func TestListJSONReturnsEmptyArrayNotNull(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "development.db")
+	runCLIOut(t, "--db", dbPath, "init")
+
+	cases := []struct {
+		noun string
+		verb string
+	}{
+		{"plan", "list"},
+		{"feedback", "list"},
+		{"review", "list"},
+		{"reminder", "list"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.noun+" "+tc.verb, func(t *testing.T) {
+			out := runCLIOut(t, "--db", dbPath, tc.noun, tc.verb, "--json")
+			if strings.TrimSpace(out) != "[]" {
+				t.Fatalf("empty %s %s --json should be %q, got %q", tc.noun, tc.verb, "[]", strings.TrimSpace(out))
+			}
+		})
+	}
+}
+
+// TestListBogusFilterReturnsExplicitError verifies that list commands
+// with enum-typed filters reject unknown values with a clear
+// "--flag: invalid value X (allowed: ...)" message instead of silently
+// producing an empty result (feedback [654b7b3e]). Each sub-case exercises
+// one list command's --status filter (and review's --severity).
+func TestListBogusFilterReturnsExplicitError(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "development.db")
+	runCLIOut(t, "--db", dbPath, "init")
+
+	cases := []struct {
+		name      string
+		args      []string
+		mustHave  []string // substrings that must appear in stderr
+	}{
+		{
+			name:     "feedback list --status bogus",
+			args:     []string{"feedback", "list", "--status", "bogus"},
+			mustHave: []string{"--status: invalid value", "open", "closed"},
+		},
+		{
+			name:     "reminder list --status bogus",
+			args:     []string{"reminder", "list", "--status", "bogus"},
+			mustHave: []string{"--status: invalid value", "open", "dismissed"},
+		},
+		{
+			name:     "task list --status bogus",
+			args:     []string{"task", "list", "--status", "bogus"},
+			mustHave: []string{"--status: invalid value", "open", "done"},
+		},
+		{
+			name:     "goal list --status bogus",
+			args:     []string{"goal", "list", "--status", "bogus"},
+			mustHave: []string{"--status: invalid value", "active", "done"},
+		},
+		{
+			name:     "plan item list --status open (invalid synonym)",
+			args:     []string{"plan", "item", "list", "--status", "open"},
+			mustHave: []string{"--status: invalid value", "planned", "in_progress", "wontfix"},
+		},
+		{
+			name:     "review list --status bogus",
+			args:     []string{"review", "list", "--status", "bogus"},
+			mustHave: []string{"--status: invalid value", "open", "resolved"},
+		},
+		{
+			name:     "review list --severity bogus",
+			args:     []string{"review", "list", "--severity", "bogus"},
+			mustHave: []string{"--severity: invalid value", "high", "critical"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, stderr, code := runCLI(t, append([]string{"--db", dbPath}, tc.args...)...)
+			if code == 0 {
+				t.Fatalf("expected non-zero exit for bogus filter; got 0, stderr=%s", stderr)
+			}
+			for _, want := range tc.mustHave {
+				if !strings.Contains(stderr, want) {
+					t.Fatalf("%s: stderr missing %q in: %s", tc.name, want, stderr)
+				}
+			}
+		})
+	}
+}
+
+// TestHelpExamplesSurfacesGotchas verifies that `devdb help <noun> <verb>
+// --examples` prints the curated example block from examplesByCommand
+// instead of the standard flag listing. The plan reconcile entry must
+// mention the --dry-run-does-not-exist gotcha that prompted the workflow
+// review (workflow-review-2026-06-24.md).
+func TestHelpExamplesSurfacesGotchas(t *testing.T) {
+	planReconcile := runCLIOut(t, "help", "plan", "reconcile", "--examples")
+	if !strings.Contains(planReconcile, "--apply") {
+		t.Fatalf("plan reconcile examples missing --apply: %q", planReconcile)
+	}
+	if !strings.Contains(planReconcile, "--dry-run") {
+		t.Fatalf("plan reconcile examples must flag --dry-run as missing: %q", planReconcile)
+	}
+
+	planItemClose := runCLIOut(t, "help", "plan", "item", "close", "--examples")
+	if !strings.Contains(planItemClose, "auto-cascades") {
+		t.Fatalf("plan item close examples must mention auto-cascade: %q", planItemClose)
+	}
+
+	feedbackClose := runCLIOut(t, "help", "feedback", "close", "--examples")
+	if !strings.Contains(feedbackClose, "Resolved by") {
+		t.Fatalf("feedback close examples must show artifact-naming template: %q", feedbackClose)
+	}
+
+	archiveRun := runCLIOut(t, "help", "archive", "run", "--examples")
+	if !strings.Contains(archiveRun, "archive run --yes") {
+		t.Fatalf("archive run examples missing --yes shape: %q", archiveRun)
+	}
+
+	// Standard help still works.
+	standard := runCLIOut(t, "help", "plan", "reconcile")
+	if !strings.Contains(standard, "Flags:") {
+		t.Fatalf("standard help for plan reconcile missing Flags: %q", standard)
+	}
+
+	// Unknown verb surfaces a hint, not a crash.
+	unknown := runCLIOut(t, "help", "totally", "fake", "--examples")
+	if !strings.Contains(unknown, "no examples registered") {
+		t.Fatalf("unknown verb --examples should hint at the registry: %q", unknown)
+	}
+}
+
 // TestPlanItemCloseAcceptsNoteFlag verifies that 'plan item close'
 // accepts --note (in addition to --evidence) and concatenates them
 // into the status_log entry.

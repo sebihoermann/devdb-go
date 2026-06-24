@@ -153,12 +153,28 @@ func TestReconcileDriftCount(t *testing.T) {
 	_, _ = planning.MeetAcceptance(db, accID, "ok", "test")
 	_, _ = planning.CloseItem(db, itemID, "shipped", "test")
 
+	// Auto-cascade: CloseItem now rolls up milestone + plan, so drift should be empty.
 	drift, err := planning.FindPlanTreeDrift(db, "")
 	if err != nil {
 		t.Fatal(err)
 	}
+	if drift.DriftCount() != 0 {
+		t.Fatalf("auto-cascade should leave no drift; got count=%d", drift.DriftCount())
+	}
+
+	// Introduce drift manually to verify reconcile remains a safety net.
+	if _, err := db.Exec(`UPDATE milestones SET status='planned' WHERE id=?`, msID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE plans SET status='active' WHERE id=?`, planID); err != nil {
+		t.Fatal(err)
+	}
+	drift, err = planning.FindPlanTreeDrift(db, "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if drift.DriftCount() < 1 {
-		t.Fatalf("drift count=%d", drift.DriftCount())
+		t.Fatalf("drift count=%d after manual rewind", drift.DriftCount())
 	}
 	result, err := planning.ReconcilePlans(db, "r", false)
 	if err != nil {

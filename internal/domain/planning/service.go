@@ -132,26 +132,34 @@ func AddAcceptance(db *sql.DB, planItemID, criterion, modelID string, ordinal in
 	return id, err
 }
 
+// setItemStatusInTx performs the status update and audit-log insert for a
+// single plan item inside the supplied transaction. Used by SetItemStatus
+// (autocommit path) and CloseItem (cascading close path) so the audit row
+// and status update always commit together.
+func setItemStatusInTx(tx *sql.Tx, itemID, status, note, modelID string) error {
+	now := storage.NowUTC()
+	if _, err := tx.Exec(`UPDATE plan_items SET status=? WHERE id=?`, status, itemID); err != nil {
+		return err
+	}
+	logID, err := storage.NewID()
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(`
+		INSERT INTO status_log(id, plan_item_id, status, note, created_at, model_id)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		logID, itemID, status, nullStr(note), now, modelID,
+	)
+	return err
+}
+
 // SetItemStatus updates plan item status and logs it.
 // Both writes run inside a single transaction; if the audit-log insert fails,
 // the status update is rolled back so the item cannot end up with a status
 // change that has no matching status_log row.
 func SetItemStatus(db *sql.DB, itemID, status, note, modelID string) error {
-	now := storage.NowUTC()
 	return storage.WithTx(db, func(tx *sql.Tx) error {
-		if _, err := tx.Exec(`UPDATE plan_items SET status=? WHERE id=?`, status, itemID); err != nil {
-			return err
-		}
-		logID, err := storage.NewID()
-		if err != nil {
-			return err
-		}
-		_, err = tx.Exec(`
-			INSERT INTO status_log(id, plan_item_id, status, note, created_at, model_id)
-			VALUES (?, ?, ?, ?, ?, ?)`,
-			logID, itemID, status, nullStr(note), now, modelID,
-		)
-		return err
+		return setItemStatusInTx(tx, itemID, status, note, modelID)
 	})
 }
 
@@ -286,8 +294,10 @@ func MeetAcceptance(db *sql.DB, accPrefix, evidence, modelID string) (string, er
 }
 
 // CloseItem closes a plan item when all acceptance criteria are met.
-// As a side-effect, if the item belongs to a milestone and all sibling
-// items in that milestone are now done, the milestone is also marked done.
+// All side-effects (status update, milestone rollup, plan rollup) commit
+// inside a single transaction; any failure rolls back the whole close so a
+// plan item cannot land in 'done' with its parent milestone or plan stuck
+// in an earlier status.
 func CloseItem(db *sql.DB, idPrefix, evidence, modelID string) (string, error) {
 	id, err := resolveItemID(db, idPrefix)
 	if err != nil {
@@ -307,38 +317,57 @@ func CloseItem(db *sql.DB, idPrefix, evidence, modelID string) (string, error) {
 	if evidence != "" {
 		note = "closed: " + evidence
 	}
-	if err := SetItemStatus(db, id, "done", note, modelID); err != nil {
-		return "", err
-	}
-	if err := maybeCompleteMilestone(db, id, modelID); err != nil {
-		return id, fmt.Errorf("item closed but milestone rollup failed: %w", err)
+	if err := storage.WithTx(db, func(tx *sql.Tx) error {
+		if err := setItemStatusInTx(tx, id, "done", note, modelID); err != nil {
+			return err
+		}
+		if _, err := maybeCompleteMilestone(tx, id); err != nil {
+			return fmt.Errorf("milestone rollup: %w", err)
+		}
+		var planID sql.NullString
+		if err := tx.QueryRow(`SELECT plan_id FROM plan_items WHERE id=?`, id).Scan(&planID); err != nil {
+			return fmt.Errorf("plan lookup: %w", err)
+		}
+		if planID.Valid && planID.String != "" {
+			if _, err := syncPlanStatus(tx, planID.String); err != nil {
+				return fmt.Errorf("plan rollup: %w", err)
+			}
+		}
+		return nil
+	}); err != nil {
+		return id, err
 	}
 	return id, nil
 }
 
 // maybeCompleteMilestone marks the parent milestone done when no items
-// in it are still open. Items without a milestone are skipped silently.
-func maybeCompleteMilestone(db *sql.DB, itemID, modelID string) error {
+// in it are still open. Items without a milestone return ("", nil) so the
+// caller can cascade the plan status without further work. The querier
+// argument accepts *sql.DB or *sql.Tx so the same helper participates in
+// CloseItem's transaction.
+func maybeCompleteMilestone(q planQuerier, itemID string) (string, error) {
 	var milestoneID sql.NullString
-	if err := db.QueryRow(`SELECT milestone_id FROM plan_items WHERE id=?`, itemID).Scan(&milestoneID); err != nil {
-		return err
+	if err := q.QueryRow(`SELECT milestone_id FROM plan_items WHERE id=?`, itemID).Scan(&milestoneID); err != nil {
+		return "", err
 	}
 	if !milestoneID.Valid {
-		return nil
+		return "", nil
 	}
 	var openCount int
-	if err := db.QueryRow(`
+	if err := q.QueryRow(`
 		SELECT COUNT(*) FROM plan_items
 		WHERE milestone_id=? AND status NOT IN ('done','wontfix')`,
 		milestoneID.String,
 	).Scan(&openCount); err != nil {
-		return err
+		return "", err
 	}
 	if openCount > 0 {
-		return nil
+		return milestoneID.String, nil
 	}
-	_, err := db.Exec(`UPDATE milestones SET status='done' WHERE id=? AND status<>'done'`, milestoneID.String)
-	return err
+	if _, err := q.Exec(`UPDATE milestones SET status='done' WHERE id=? AND status<>'done'`, milestoneID.String); err != nil {
+		return "", err
+	}
+	return milestoneID.String, nil
 }
 
 // ListPlans returns active plans.

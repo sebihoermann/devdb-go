@@ -41,7 +41,11 @@ There are two modes. Identify the mode before acting.
 
 **Execution mode.** The user says "go", "start M1", "ship it", or similar. Now act. Bracket the work with `plan item start` and `plan item pause`. Log async observations as you find them. Run the session-start ritual first.
 
-If you are not sure which mode you are in, use brainstorm mode.
+**Mode test.** If you are not sure which mode you are in, answer this: *are you about to edit a file, run a non-read command, or modify state in this turn?* If yes, execution mode. If no (you are about to log, draft, ask, or explain), brainstorm mode. The test is intentionally narrow so that "I want to write a plan" stays brainstorm mode (no edits yet) and "I want to anchor the plan in devdb" flips to execution mode (state change).
+
+If you are still not sure, default to brainstorm mode.
+
+**Brainstorm artifacts do not linger across sessions.** Files created in brainstorm mode (`docs/*-brainstorm.md`, scratch `*.md` in `docs/`, exploratory notes next to a feature) must be either committed (promoted to execution mode and merged into a plan) or gitignored before the session ends. The devdb repo's `.gitignore` already excludes `docs/*-brainstorm.md` so untracked brainstorm docs do not show up as a "dirty worktree" line on every future session. If you write a new category of brainstorm artifact (e.g. `scratch/*.md`), extend `.gitignore` and commit the change in the same execution-mode turn that creates the artifact.
 
 ## Session-start ritual
 
@@ -234,6 +238,8 @@ The closure ritual is non-negotiable. If you skip step 2 and jump straight to `p
 
 **If you forget the ritual:** the next agent's spot-check (or `devdb status --json` showing a done plan with open criteria) will catch it. Backfill by running `plan acceptance meet` with `--evidence <commit-sha>` against the original commit.
 
+**Run meets sequentially, not in parallel.** When ticking multiple acceptance criteria for one plan item, run `devdb plan acceptance meet` calls back-to-back from a single shell, not concurrently across shells or background processes. Parallel `meet` invocations from separate processes have been observed to surface `PRAGMA journal_mode = WAL: database is locked (SQLITE_BUSY)` even with `MaxOpenConns(1)` and the in-process retry budget, because the existing retry covers `PRAGMA` setup but not always the transaction commit window. See feedback `[bbec89e6]` and plan item `8e27044…` (auto-cascade) / `ef22d8c…` (`WithTx` retry extension) for the durable fixes; the sequential discipline is the in-the-meantime rule.
+
 ## Behavioral rules
 
 **Async observation, no interruption.** When you spot a smell or surprise while working, log it with `feedback add --role codebase` and continue. Do not stop the current task to ask permission.
@@ -267,6 +273,24 @@ devdb feedback annotate <id> --note "..."
 devdb feedback import markdown path/to/archive.md
 devdb feedback import commits --branch feature/foo
 ```
+
+**Closing feedback — name the artifact, not the behavior.** When closing feedback, the `--proposed-fix` field should name the commit and the artifact that fixes the issue, not describe the agent's behavior at close time. A casual reader of the close reason should be able to grep for the artifact and find the durable fix, not a paragraph about what the closing agent did. Template:
+
+```bash
+devdb feedback close <id> --proposed-fix "Resolved by <commit-sha> which adds <artifact>: <one-line description>"
+```
+
+Examples:
+
+```bash
+# Bad: describes the closing agent's behavior. Tells future readers nothing durable.
+devdb feedback close 1719d022 --proposed-fix "this session closed every plan with reconcile before stopping"
+
+# Good: names the commit and the artifact (the durable fix).
+devdb feedback close 1719d022 --proposed-fix "Resolved by 8e27044 which adds service.CloseItem auto-cascade: closing the last item in a milestone now flips the parent plan to done in the same transaction"
+```
+
+The closure ritual above applies to plan items; this rule applies to the parallel `--proposed-fix` field on feedback rows. Both should point at the artifact so the audit trail is grep-able from either direction.
 
 Use `--category idea` for improvement suggestions — there is no separate suggestions table in Go.
 
@@ -430,7 +454,7 @@ Federation queries (`hub across`) attach each project's `development.db` directl
 
 **Initialization:** `init`, `import python-db`
 
-**Planning:** `plan create|list|show|tree|status|scaffold|promote|reconcile` · `plan milestone add|list|status` · `plan item add|list|show|start|pause|close|status` · `plan acceptance add|meet|backfill` · `plan file add`
+**Planning:** `plan create|list|show|tree|status|scaffold|promote|reconcile` · `plan milestone add|list|status` · `plan item add|list|show|start|pause|close|status` · `plan acceptance add|meet|backfill` (run `meet` calls sequentially, not in parallel — see Closure ritual) · `plan file add`
 
 **Memory:** `feedback add|list|show|close|annotate|import` · `goal add|list|set` · `feature add|list`
 
@@ -446,7 +470,7 @@ Federation queries (`hub across`) attach each project's `development.db` directl
 
 **Hub:** `hub register|unregister|list|sync|dashboard|project|doctor|across`
 
-**Hygiene / analytics:** `archive run|list|restore|gc` · `analytics missed|summary`
+**Hygiene / analytics:** `archive run|list|restore|gc` · `analytics missed|summary` · `ledger housekeeping` (bundled archive + reconcile + scan + optional verify)
 
 **Reads:** `status`, `quality`, `report`, `resume`, `doctor`, `help`, `list`, `show`
 

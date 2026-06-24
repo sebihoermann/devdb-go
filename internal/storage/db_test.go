@@ -4,9 +4,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // busyErr is a test double that mimics modernc.org/sqlite Error's Code()
@@ -214,5 +218,113 @@ func TestConcurrentWritesDoNotError(t *testing.T) {
 	var rows int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM writes`).Scan(&rows); err != nil || rows != goroutines {
 		t.Fatalf("rows=%d err=%v (want %d)", rows, err, goroutines)
+	}
+}
+
+// TestJitterBusyDelaySpreads verifies that retry sleeps are not deterministic
+// — without jitter, three parallel processes retry in lockstep and exhaust
+// the budget together (the failure mode behind feedback bbec89e6).
+func TestJitterBusyDelaySpreads(t *testing.T) {
+	base := 100 * time.Millisecond
+	seen := map[time.Duration]bool{}
+	for range 50 {
+		seen[jitterBusyDelay(base)] = true
+	}
+	// 50 samples should yield many distinct delays. If jitter is missing,
+	// every sample lands on the same value and len(seen)==1.
+	if len(seen) < 5 {
+		t.Fatalf("jitter not applied: %d distinct delays out of 50", len(seen))
+	}
+	// Sanity: jitter must keep each sample inside [base/2, 3*base/2).
+	for d := range seen {
+		if d < base/2 || d >= base+base/2 {
+			t.Fatalf("jitter out of bounds: base=%v sample=%v", base, d)
+		}
+	}
+}
+
+// TestParallelSubprocessesContendForDB simulates the cross-process failure
+// mode from feedback bbec89e6: three devdb CLI invocations write to the
+// same development.db at the same time, contending on PRAGMA setup and
+// transaction commit. With retry + jitter all writers must eventually
+// succeed; without them at least one would surface SQLITE_BUSY.
+//
+// The test spawns the test binary as a subprocess (one per writer) so each
+// process holds its own *sql.DB and contends on the file lock — the same
+// shape as parallel `devdb plan acceptance meet` invocations.
+func TestParallelSubprocessesContendForDB(t *testing.T) {
+	if os.Getenv("DEVDB_PARALLEL_HARNESS") == "1" {
+		runParallelWriteHarness(t)
+		return
+	}
+
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "shared.db")
+	seed, err := Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := seed.Exec(`CREATE TABLE writes (id INTEGER PRIMARY KEY AUTOINCREMENT, body TEXT)`); err != nil {
+		seed.Close()
+		t.Fatal(err)
+	}
+	seed.Close()
+
+	const writers = 3
+	var wg sync.WaitGroup
+	errs := make([]error, writers)
+	for i := 0; i < writers; i++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			cmd := exec.Command(os.Args[0], "-test.run=^TestParallelSubprocessesContendForDB$")
+			cmd.Env = append(os.Environ(),
+				"DEVDB_PARALLEL_HARNESS=1",
+				fmt.Sprintf("DEVDB_PARALLEL_DB=%s", dbPath),
+				fmt.Sprintf("DEVDB_PARALLEL_WRITER=%d", n),
+			)
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				errs[n] = fmt.Errorf("writer %d: %v\n%s", n, err, out)
+			}
+		}(i)
+	}
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	verify, err := Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer verify.Close()
+	var rows int
+	if err := verify.QueryRow(`SELECT COUNT(*) FROM writes`).Scan(&rows); err != nil {
+		t.Fatal(err)
+	}
+	if rows != writers {
+		t.Fatalf("rows=%d want %d (one per subprocess)", rows, writers)
+	}
+}
+
+func runParallelWriteHarness(t *testing.T) {
+	dbPath := os.Getenv("DEVDB_PARALLEL_DB")
+	writer := os.Getenv("DEVDB_PARALLEL_WRITER")
+	if dbPath == "" {
+		t.Fatal("DEVDB_PARALLEL_DB unset")
+	}
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := WithTx(db, func(tx *sql.Tx) error {
+		_, err := tx.Exec(`INSERT INTO writes(body) VALUES (?)`, fmt.Sprintf("writer-%s", writer))
+		return err
+	}); err != nil {
+		t.Fatal(err)
 	}
 }

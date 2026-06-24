@@ -3,3 +3,9 @@
 *.test
 *.out
 coverage.out
+
+# Brainstorm-mode scratch artifacts. See skills/devdb/SKILL.md "Operating
+# modes" — brainstorm docs are not anchored to a plan and should either
+# be promoted to execution mode (committed) or stay out of git entirely.
+docs/*-brainstorm.md
+docs/brainstorm-*.md

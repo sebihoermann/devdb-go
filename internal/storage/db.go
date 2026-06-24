@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -15,6 +16,17 @@ const (
 	busyRetryBaseDelay = 50 * time.Millisecond
 	busyRetryMaxDelay  = 500 * time.Millisecond
 )
+
+// jitterBusyDelay spreads each retry sleep across [base/2, base+base/2] so
+// contending processes do not retry in lockstep. Without jitter, three
+// parallel `devdb plan acceptance meet` invocations collide on every PRAGMA
+// or commit and exhaust the retry budget together.
+func jitterBusyDelay(base time.Duration) time.Duration {
+	if base <= 0 {
+		return 0
+	}
+	return base/2 + time.Duration(rand.Int63n(int64(base)))
+}
 
 // busyCoder is the optional interface satisfied by errors that carry a
 // SQLite result code. The modernc.org/sqlite driver exposes this via
@@ -46,7 +58,12 @@ func isBusyError(err error) bool {
 // transient SQLite lock error. Other errors return immediately so callers
 // do not get silently retried constraint violations. After
 // busyRetryAttempts attempts the last error is returned, wrapped so callers
-// can still match on errors.As.
+// can still match on errors.As. Sleep durations are jittered so contending
+// processes do not retry in lockstep and exhaust the budget together.
+//
+// The retry covers the whole fn call, so any caller that wraps a transaction
+// body (begin + fn(tx) + commit) gets commit-window retries for free. This
+// is how `Open` covers PRAGMA setup and `WithTx` covers transaction commit.
 func withBusyRetry(fn func() error) error {
 	var err error
 	delay := busyRetryBaseDelay
@@ -58,7 +75,7 @@ func withBusyRetry(fn func() error) error {
 		if attempt == busyRetryAttempts-1 {
 			break
 		}
-		time.Sleep(delay)
+		time.Sleep(jitterBusyDelay(delay))
 		delay *= 2
 		if delay > busyRetryMaxDelay {
 			delay = busyRetryMaxDelay
@@ -68,8 +85,8 @@ func withBusyRetry(fn func() error) error {
 }
 
 // Open connects to a SQLite database with devdb pragmas applied.
-// Transient SQLITE_BUSY from PRAGMA setup is retried with bounded backoff so
-// concurrent agent invocations do not require a manual retry.
+// Transient SQLITE_BUSY from PRAGMA setup is retried with bounded backoff
+// (and jitter) so concurrent agent invocations do not require a manual retry.
 func Open(path string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -94,9 +111,12 @@ func Open(path string) (*sql.DB, error) {
 }
 
 // WithTx runs fn inside a transaction with SQLITE_BUSY retry, rolling back
-// on error. The whole transaction is retried on transient locks so callers
-// do not duplicate side effects; if fn returns a non-busy error the retry
-// loop exits immediately.
+// on error. The whole transaction (Begin + fn + Commit) is retried on
+// transient locks with bounded exponential backoff plus jitter, so callers
+// do not duplicate side effects and contending processes do not retry in
+// lockstep; if fn returns a non-busy error the retry loop exits immediately.
+// Commit failures are caught by the same retry, so this helper covers the
+// transaction commit window, not just PRAGMA setup.
 func WithTx(db *sql.DB, fn func(*sql.Tx) error) error {
 	return withBusyRetry(func() error {
 		tx, err := db.Begin()

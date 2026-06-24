@@ -84,12 +84,34 @@ func recordMissedFromError(err error) {
 	analytics.RecordMissedCall(ctx.DB, os.Args[1:], ce.Kind, ce.Message, ce.Suggestion, ce.Code, cwd, ctx.Project.RepoRoot, ctx.ModelID)
 }
 
+// validateEnum rejects a flag value that is not in the allowed set,
+// returning a CLIError with ExitUsage and a message that names the flag,
+// the rejected value, and the allowed values. Used by list-style commands
+// whose --status / --severity filters have a closed enum; without this,
+// a bogus value silently produces an empty result (feedback [654b7b3e]).
+//
+// An empty value is treated as "no filter" and passes through. The
+// caller decides whether "all" means "no filter" (reminders, tasks)
+// or is itself a valid value (feedback), by listing it in `allowed`.
+func validateEnum(flagName, value string, allowed []string) error {
+	if value == "" {
+		return nil
+	}
+	for _, a := range allowed {
+		if value == a {
+			return nil
+		}
+	}
+	return usageError(fmt.Sprintf("--%s: invalid value %q (allowed: %s)", flagName, value, strings.Join(allowed, ", ")))
+}
+
 func newRoot() *cobra.Command {
 	var jsonOut bool
 
 	root := &cobra.Command{
 		Use:           "devdb",
 		Short:         "Queryable per-project memory for codebases",
+		Long:          "Queryable per-project memory for codebases. Use 'devdb help <command> --examples' to see real command shapes and known gotchas for any verb.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
@@ -120,6 +142,7 @@ func newRoot() *cobra.Command {
 		cmdReminder(open),
 		cmdArchive(open),
 		cmdAnalytics(open),
+		cmdLedger(open),
 		cmdList(open),
 		cmdShow(open),
 		cmdInventory(open),
@@ -456,6 +479,9 @@ func cmdFeedbackList(open opener) *cobra.Command {
 			if err := ctx.RequireDB(); err != nil {
 				return err
 			}
+			if err := validateEnum("status", st, []string{"open", "closed", "all"}); err != nil {
+				return err
+			}
 			rows, err := feedback.List(ctx.DB, st, effectiveListLimit(20))
 			if err != nil {
 				return err
@@ -463,7 +489,7 @@ func cmdFeedbackList(open opener) *cobra.Command {
 			return ctx.Out.PrintData(rows)
 		},
 	}
-	c.Flags().StringVar(&st, "status", "open", "filter by status")
+	c.Flags().StringVar(&st, "status", "open", "filter by status (open|closed|all)")
 	return c
 }
 
@@ -907,12 +933,91 @@ func cmdImport(open opener) *cobra.Command {
 	return importCmd
 }
 
+// examplesByCommand maps "noun verb" (or just "noun" / "help") to a
+// multi-line example block. Surfaced via `devdb help <noun> <verb>
+// --examples` so agents get real command shapes plus known gotchas instead
+// of generic flag listings. Add an entry when a verb has a non-obvious
+// flag, a common mistake, or a recently-fixed defect worth remembering.
+var examplesByCommand = map[string]string{
+	"help": `devdb help plan reconcile                # standard help for one verb
+devdb help plan reconcile --examples     # real command shapes + gotchas
+devdb help feedback close --examples     # artifact-naming template for --proposed-fix
+devdb help archive run --examples        # cron-safe hygiene command
+devdb help ledger housekeeping --examples`,
+	"plan reconcile": `devdb plan reconcile                          # show drift in every plan
+devdb plan reconcile --plan my-plan             # drift in one plan
+devdb plan reconcile --plan my-plan --apply     # repair the drift
+
+Note: there is no --dry-run flag. The verb's natural mode is dry-run; pass
+--apply to repair. (Gotcha that bit triage on 2026-06-24.)`,
+	"plan item close": `devdb plan item close <id> --evidence "<commit-or-note>"
+devdb plan item close <id-prefix> --note "free-form annotation" --evidence "<commit>"
+
+Closes the item and, when it is the last open item in its milestone or
+plan, auto-cascades the parent statuses to done in a single transaction.
+Run 'devdb plan acceptance meet' calls sequentially from one shell, not
+in parallel — see skills/devdb/SKILL.md "Closure ritual".`,
+	"plan acceptance meet": `devdb plan acceptance meet <criterion-id> --evidence "<commit-or-note>"
+
+Run these sequentially from one shell, not in parallel from multiple
+background processes. Parallel invocations from separate processes have
+been observed to surface SQLITE_BUSY even with the in-process retry
+budget; sequential keeps the commit window contention-free.`,
+	"feedback close": `devdb feedback close <id> --proposed-fix "Resolved by <commit> which adds <artifact>: <one-line description>"
+
+Name the commit + the artifact, not the closing agent's behavior. See
+skills/devdb/SKILL.md "Closing feedback — name the artifact, not the behavior".`,
+	"feedback list": `devdb feedback list --json                       # stable: returns [] on empty, never null
+devdb feedback list --status open --json            # default status filter
+devdb feedback list --status bogus                   # ERROR: --status: invalid value "bogus" (allowed: open, closed, all)
+
+Empty --json output is always an array, so agents can iterate without a
+nil-guard. Bogus filter values surface as explicit errors (exit code
+ExitUsage) rather than silently producing an empty result. See feedback
+[654b7b3e] for the original DX complaint.`,
+	"archive run": `devdb archive run --dry-run            # preview what would move
+devdb archive run --yes                # actually archive
+devdb archive run --yes --vacuum       # archive + reclaim freed pages
+
+Non-interactive by design: --yes suppresses the confirmation prompt,
+--json is machine-readable. Cron entry:
+
+  0 3 * * 0  cd /path/to/repo && devdb archive run --yes --json >> .devdb/archive.log 2>&1`,
+	"ledger housekeeping": `devdb ledger housekeeping                 # run archive + reconcile + inventory scan + verify query
+devdb ledger housekeeping --dry-run       # preview without writing
+devdb ledger housekeeping --json          # machine-readable output
+
+Bundles the recurring hygiene steps (archive run --yes, plan reconcile
+--apply, inventory scan, verify query summary) into one command so the
+weekly cron and end-of-session agents do not hand-craft the sequence.`,
+}
+
+func exampleForCommand(key string) string {
+	if ex, ok := examplesByCommand[key]; ok {
+		return ex
+	}
+	return fmt.Sprintf("(no examples registered for %q; add one to examplesByCommand in internal/cli/commands.go)", key)
+}
+
 func cmdHelp() *cobra.Command {
-	return &cobra.Command{
+	var examples bool
+	cmd := &cobra.Command{
 		Use:   "help [command]",
 		Short: "Show help for a command (no arg = global help)",
+		Long: `devdb help <noun> <verb>             # standard help for one verb
+devdb help <noun> <verb> --examples  # real command shapes + gotchas
+
+Pass --examples after the verb name to print a curated example block
+instead of the standard flag listing. Examples live in
+internal/cli/commands.go (examplesByCommand) and are added when a verb
+has a non-obvious gotcha worth remembering.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			root := cmd.Root()
+			if examples {
+				key := strings.Join(args, " ")
+				fmt.Fprintln(cmd.OutOrStdout(), exampleForCommand(key))
+				return nil
+			}
 			if len(args) == 0 {
 				return root.Help()
 			}
@@ -928,6 +1033,8 @@ func cmdHelp() *cobra.Command {
 			return target.Help()
 		},
 	}
+	cmd.Flags().BoolVar(&examples, "examples", false, "print curated example block instead of standard help")
+	return cmd
 }
 
 var flagRepo, flagDB string

@@ -64,6 +64,8 @@ The `.codegraph/` directory is generated state. Treat it like `.devdb/`: not for
 
 ## 6. Self-audit on skip
 
+**Pre-condition for grep/Glob/Read in an indexed repo.** Before the first `grep`, `Glob`, or `Read` in a task, run `codegraph_explore` on a query that names the symbol you are about to look at (e.g. `codegraph_explore "SetItemStatus"` or `codegraph_explore "cmdPlanItemPause SetItemStatus status_log"`). If you cannot formulate a query that names the symbol, you probably don't need grep either — either the task is small enough to edit directly (see Decision Tree row "I know the exact line") or the answer is in the skill text already.
+
 If you call `grep`, `Glob`, or `Read` on an indexed repo **without a prior codegraph call in the same task**, immediately log:
 
 ```bash
