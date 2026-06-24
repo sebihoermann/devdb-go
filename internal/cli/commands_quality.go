@@ -163,6 +163,12 @@ func cmdReviewList(open opener) *cobra.Command {
 			if err := ctx.RequireDB(); err != nil {
 				return err
 			}
+			if err := validateEnum("status", status, []string{"open", "resolved", "wontfix", "accepted", "duplicate", "all"}); err != nil {
+				return err
+			}
+			if err := validateEnum("severity", severity, []string{"info", "low", "med", "medium", "high", "critical", "all"}); err != nil {
+				return err
+			}
 			st := status
 			if st == "all" {
 				st = ""

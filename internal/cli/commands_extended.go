@@ -66,6 +66,9 @@ func cmdGoalList(open opener) *cobra.Command {
 			if err := ctx.RequireDB(); err != nil {
 				return err
 			}
+			if err := validateEnum("status", st, []string{"active", "done", "all"}); err != nil {
+				return err
+			}
 			rows, err := goals.List(ctx.DB, st, effectiveListLimit(20))
 			if err != nil {
 				return err
@@ -225,6 +228,9 @@ func cmdTaskList(open opener) *cobra.Command {
 			}
 			defer ctx.Close()
 			if err := ctx.RequireDB(); err != nil {
+				return err
+			}
+			if err := validateEnum("status", st, []string{"open", "done", "all"}); err != nil {
 				return err
 			}
 			rows, err := tasks.List(ctx.DB, st, priority, effectiveListLimit(30))
@@ -526,6 +532,9 @@ func cmdReminderList(open opener) *cobra.Command {
 			}
 			defer ctx.Close()
 			if err := ctx.RequireDB(); err != nil {
+				return err
+			}
+			if err := validateEnum("status", st, []string{"open", "dismissed", "all"}); err != nil {
 				return err
 			}
 			rows, err := reminders.List(ctx.DB, st, overdue, effectiveListLimit(30))
@@ -887,6 +896,9 @@ func cmdPlanItemList(open opener) *cobra.Command {
 			if err := ctx.RequireDB(); err != nil {
 				return err
 			}
+			if err := validateEnum("status", st, []string{"planned", "in_progress", "done", "wontfix", "all"}); err != nil {
+				return err
+			}
 			rows, err := planning.ListItems(ctx.DB, planning.ItemFilter{
 				PlanID: planID, MilestoneID: milestoneID, Status: st, LegacyOnly: legacy, Limit: effectiveListLimit(50),
 			})
@@ -898,7 +910,7 @@ func cmdPlanItemList(open opener) *cobra.Command {
 	}
 	c.Flags().StringVar(&planID, "plan", "", "plan id")
 	c.Flags().StringVar(&milestoneID, "milestone", "", "milestone id")
-	c.Flags().StringVar(&st, "status", "", "status filter")
+	c.Flags().StringVar(&st, "status", "", "status filter (planned|in_progress|done|wontfix|all)")
 	c.Flags().BoolVar(&legacy, "legacy", false, "only legacy flat items")
 	return c
 }

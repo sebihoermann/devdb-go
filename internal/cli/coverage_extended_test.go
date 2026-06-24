@@ -654,9 +654,33 @@ func TestInProcessPlanReconcileApply(t *testing.T) {
 	e.run("plan", "acceptance", "meet", accID, "--evidence", "test")
 	e.run("plan", "item", "close", itemID, "--evidence", "done")
 
+	// Auto-cascade should leave the plan tree clean; no drift after close.
 	drift := e.runOut("plan", "reconcile", "--plan", "reconcile")
+	if !strings.Contains(drift, "no plan-tree drift detected") {
+		t.Fatalf("auto-cascade should prevent drift after close; got %q", drift)
+	}
+
+	// Manually rewind statuses to introduce drift, then verify reconcile
+	// still works as a safety net for paths that bypass CloseItem.
+	db, err := storage.Open(e.dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE milestones SET status='planned' WHERE id=?`, msID); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE plans SET status='active' WHERE id=?`, planID); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	db.Close()
+	drift = e.runOut("plan", "reconcile", "--plan", "reconcile")
+	if strings.Contains(drift, "no plan-tree drift detected") {
+		t.Fatalf("reconcile should detect drift after manual rewind: %q", drift)
+	}
 	if !strings.Contains(drift, "drift detected") {
-		t.Fatalf("reconcile: %q", drift)
+		t.Fatalf("reconcile should report drift; got %q", drift)
 	}
 	applied := e.runOut("plan", "reconcile", "--plan", "reconcile", "--apply")
 	if !strings.Contains(applied, "reconciled") {
@@ -978,7 +1002,7 @@ func TestInProcessFilteredReads(t *testing.T) {
 	e.runOut("doctor", "hygiene", "--json")
 	e.runOut("goal", "set", e.run("goal", "add", "G", "--kind", "goal"), "done")
 	e.runOut("feature", "list")
-	e.runOut("plan", "item", "list", "--status", "open")
+	e.runOut("plan", "item", "list", "--status", "planned")
 }
 
 func TestInProcessFeedbackImportSingleRowMarkdown(t *testing.T) {

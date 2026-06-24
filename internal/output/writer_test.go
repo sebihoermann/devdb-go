@@ -2,6 +2,7 @@ package output
 
 import (
 	"bytes"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -100,5 +101,58 @@ func TestPrintDataJSON(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), `"a"`) {
 		t.Fatalf("json array: %q", out.String())
+	}
+}
+
+// TestPrintDataJSONNilSliceEmitsEmptyArray verifies the JSON stability
+// contract: list-style --json output must be `[]` when the result is
+// empty, never `null`. Agents parsing devdb JSON depend on the array
+// shape so they can iterate without a nil-guard. Closes feedback
+// [654b7b3e].
+func TestPrintDataJSONNilSliceEmitsEmptyArray(t *testing.T) {
+	cases := []struct {
+		name string
+		in   any
+	}{
+		{"nil []string", []string(nil)},
+		{"nil []int", []int(nil)},
+		{"nil typed slice via interface", interface{}([]feedbackShape(nil))},
+		{"non-nil empty slice still []", []string{}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			w := &Writer{JSON: true, Stdout: &out}
+			if err := w.PrintData(tc.in); err != nil {
+				t.Fatal(err)
+			}
+			got := strings.TrimSpace(out.String())
+			if got != "[]" {
+				t.Fatalf("nil/empty slice should marshal to %q, got %q", "[]", got)
+			}
+		})
+	}
+}
+
+type feedbackShape struct {
+	ID string `json:"id"`
+}
+
+// TestStableJSONValuePassThrough covers the non-slice paths so the helper
+// does not accidentally rewrite scalars, maps, or structs.
+func TestStableJSONValuePassThrough(t *testing.T) {
+	cases := []any{
+		nil,
+		"hello",
+		42,
+		map[string]any{"k": "v"},
+		feedbackShape{ID: "abc"},
+		[]string{"a", "b"},
+	}
+	for _, in := range cases {
+		got := stableJSONValue(in)
+		if !reflect.DeepEqual(got, in) {
+			t.Fatalf("stableJSONValue changed value: in=%v got=%v", in, got)
+		}
 	}
 }

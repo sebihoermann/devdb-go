@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"reflect"
 )
 
 // Writer enforces the devdb stdout/stderr contract.
@@ -35,7 +36,7 @@ func (w *Writer) WriteResult(id string, meta map[string]any) error {
 // PrintData emits structured read output.
 func (w *Writer) PrintData(v any) error {
 	if w.JSON {
-		return w.emitJSON(v)
+		return w.emitJSON(stableJSONValue(v))
 	}
 	return w.printHuman(v)
 }
@@ -44,6 +45,27 @@ func (w *Writer) emitJSON(v any) error {
 	enc := json.NewEncoder(w.Stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(v)
+}
+
+// stableJSONValue replaces a top-level nil slice with an empty slice so
+// list commands always emit [] for empty results, never null. This is the
+// JSON contract every agent and downstream tool relies on (validated by
+// `devdb feedback list --json` returning `[]` on an empty DB rather than
+// `null`); the underlying domain layer can keep returning nil for "no
+// rows matched" without breaking parsers that expect arrays.
+//
+// Top-level only — nested slices inside structs/maps are rare in devdb
+// reads and out of scope; revisit if a struct field starts surfacing the
+// same null-vs-[] confusion.
+func stableJSONValue(v any) any {
+	if v == nil {
+		return v
+	}
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Slice && rv.IsNil() {
+		return reflect.MakeSlice(rv.Type(), 0, 0).Interface()
+	}
+	return v
 }
 
 func (w *Writer) printHuman(v any) error {
