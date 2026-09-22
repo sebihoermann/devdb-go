@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -817,6 +818,14 @@ func cmdPlanMilestoneList(open opener) *cobra.Command {
 			if planID == "" {
 				return usageError("--plan is required")
 			}
+			resolved, err := planning.ResolvePlanID(ctx.DB, planID)
+			if err != nil {
+				if errors.Is(err, planning.ErrPlanNotFound) {
+					return notFoundError("plan not found: " + planID)
+				}
+				return err
+			}
+			planID = resolved
 			rows, err := planning.ListMilestones(ctx.DB, planID)
 			if err != nil {
 				return err
@@ -824,7 +833,7 @@ func cmdPlanMilestoneList(open opener) *cobra.Command {
 			return ctx.Out.PrintData(rows)
 		},
 	}
-	c.Flags().StringVar(&planID, "plan", "", "plan id")
+	c.Flags().StringVar(&planID, "plan", "", "plan slug or id")
 	return c
 }
 
@@ -899,6 +908,16 @@ func cmdPlanItemList(open opener) *cobra.Command {
 			if err := validateEnum("status", st, []string{"planned", "in_progress", "done", "wontfix", "all"}); err != nil {
 				return err
 			}
+			if planID != "" {
+				resolved, err := planning.ResolvePlanID(ctx.DB, planID)
+				if err != nil {
+					if errors.Is(err, planning.ErrPlanNotFound) {
+						return notFoundError("plan not found: " + planID)
+					}
+					return err
+				}
+				planID = resolved
+			}
 			rows, err := planning.ListItems(ctx.DB, planning.ItemFilter{
 				PlanID: planID, MilestoneID: milestoneID, Status: st, LegacyOnly: legacy, Limit: effectiveListLimit(50),
 			})
@@ -908,7 +927,7 @@ func cmdPlanItemList(open opener) *cobra.Command {
 			return ctx.Out.PrintData(rows)
 		},
 	}
-	c.Flags().StringVar(&planID, "plan", "", "plan id")
+	c.Flags().StringVar(&planID, "plan", "", "plan slug or id")
 	c.Flags().StringVar(&milestoneID, "milestone", "", "milestone id")
 	c.Flags().StringVar(&st, "status", "", "status filter (planned|in_progress|done|wontfix|all)")
 	c.Flags().BoolVar(&legacy, "legacy", false, "only legacy flat items")
