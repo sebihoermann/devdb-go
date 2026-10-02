@@ -6,19 +6,110 @@ on:
   pull_request:
     branches: [main]
 
+# Only the jobs below need write access to publish a step summary and upload
+# the coverage artifact. The default token has more than this workflow uses.
+permissions:
+  contents: read
+
+# Gate on the total coverage floor. Measured at 86.5% on 2026-10-02 with
+# `go tool cover -func`. The floor sits just below that so the gate blocks a
+# regression rather than blocking unrelated work.
+#
+# Read this number with suspicion. It is dominated by the generated
+# coverage_*_test.go layer (63 files, 7931 lines) which asserts little; plan
+# item 2cabc4ef deletes that layer and records the resulting baseline, at
+# which point this floor should be revised downward to the honest number and
+# then ratcheted up. Do not raise it above the honest figure to make the gate
+# look healthy.
+env:
+  COVERAGE_FLOOR: "84.0"
+
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  verify:
+    name: verify (${{ matrix.go }} / ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Report every cell rather than cancelling siblings on the first
+      # failure, so one push tells you everything that broke. If a cell is
+      # flaky or slow enough to annoy, fix the cause or remove the cell. Do
+      # not add continue-on-error to quiet it down.
+      fail-fast: false
+      matrix:
+        go: ["1.23", "1.24"]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version: "1.23"
+          go-version: ${{ matrix.go }}
+          cache: true
 
-      - name: Run tests
-        run: go test ./...
+      # A gate that starts red is worse than no gate, so this runs only where
+      # line endings are not rewritten by the checkout.
+      - name: gofmt
+        if: runner.os != 'Windows'
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt needed on these files:"
+            echo "$unformatted"
+            exit 1
+          fi
 
-      - name: Build binary
-        run: go build -o devdb ./cmd/devdb
+      - name: go vet
+        run: go vet ./...
+
+      - name: build all packages
+        # Includes both binaries. The previous workflow built only
+        # ./cmd/devdb, so cmd/devdb-openclaw was never compiled by CI.
+        run: go build ./...
+
+      - name: test (race detector)
+        # The race detector needs a C toolchain on Windows, where it is not
+        # reliably present on the hosted runner images. Keep the race gate on
+        # the platforms where it is dependable.
+        if: runner.os != 'Windows'
+        run: go test -race -count=1 ./...
+
+      # The suite is not yet verified on Windows. internal/storage spawns the
+      # test binary as a subprocess and other packages assert on permission
+      # bits, neither of which has been checked on that platform. Building is
+      # verified; running is deliberately not claimed until it is. If this step
+      # is enabled and a cell fails on a platform assumption, fix the
+      # assumption rather than marking the cell continue-on-error.
+      - name: test
+        if: runner.os == 'Windows'
+        run: |
+          echo "not running the test suite on Windows: not yet verified (see comment above)"
+          echo "build was verified on this cell; see the comment for what must be checked first"
+
+      - name: measure coverage
+        # On the designated cell only, so the number reflects one OS and one
+        # Go version rather than three.
+        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.23'
+        run: go test -count=1 -covermode=atomic -coverprofile=coverage.out ./...
+
+      - name: enforce coverage floor
+        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.23'
+        run: |
+          total=$(go tool cover -func=coverage.out | awk '/^total:/ {gsub(/%/, "", $3); print $3}')
+          echo "total coverage: ${total}% (floor ${COVERAGE_FLOOR}%)"
+          {
+            echo "### Coverage"
+            echo
+            echo "| total | floor |"
+            echo "|---|---|"
+            echo "| ${total}% | ${COVERAGE_FLOOR}% |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          awk -v t="$total" -v f="$COVERAGE_FLOOR" 'BEGIN {
+            if (t + 0 < f + 0) { printf "::error::coverage %s%% is below the %s%% floor\n", t, f; exit 1 }
+          }'
+
+      - name: upload coverage profile
+        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.23'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage
+          path: coverage.out
+          if-no-files-found: error
