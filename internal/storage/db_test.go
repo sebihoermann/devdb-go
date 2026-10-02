@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -307,6 +309,178 @@ func TestParallelSubprocessesContendForDB(t *testing.T) {
 	}
 	if rows != writers {
 		t.Fatalf("rows=%d want %d (one per subprocess)", rows, writers)
+	}
+}
+
+// TestOpenAppliesBusyTimeoutBeforeJournalMode guards the PRAGMA ordering in
+// openPragmas. journal_mode = WAL needs a brief exclusive lock to convert the
+// journal; if it runs before busy_timeout is set it acquires that lock with a
+// zero timeout and concurrent devdb processes fail at Open instead of waiting.
+// See plan item 445210c7 and the openPragmas doc comment.
+func TestOpenAppliesBusyTimeoutBeforeJournalMode(t *testing.T) {
+	index := func(needle string) int {
+		for i, p := range openPragmas {
+			if strings.Contains(p, needle) {
+				return i
+			}
+		}
+		t.Fatalf("openPragmas is missing %q; got %v", needle, openPragmas)
+		return -1
+	}
+
+	busy := index("busy_timeout")
+	journal := index("journal_mode")
+	foreignKeys := index("foreign_keys")
+
+	if busy > journal {
+		t.Errorf("busy_timeout (index %d) must be applied before journal_mode (index %d); order is %v", busy, journal, openPragmas)
+	}
+	if foreignKeys < journal {
+		t.Errorf("foreign_keys is lock-free and belongs last; order is %v", openPragmas)
+	}
+}
+
+// TestOpenAppliesPragmasToConnection proves the pragmas actually landed on the
+// pooled connection rather than being accepted and discarded. A PRAGMA applied
+// to a different connection than the one the pool later hands out would pass an
+// ordering test and still leave writes unprotected.
+func TestOpenAppliesPragmasToConnection(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "pragmas.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	var timeoutMS int
+	if err := db.QueryRow(`PRAGMA busy_timeout`).Scan(&timeoutMS); err != nil {
+		t.Fatal(err)
+	}
+	if timeoutMS != 5000 {
+		t.Errorf("busy_timeout = %d, want 5000", timeoutMS)
+	}
+
+	var journal string
+	if err := db.QueryRow(`PRAGMA journal_mode`).Scan(&journal); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.EqualFold(journal, "wal") {
+		t.Errorf("journal_mode = %q, want wal", journal)
+	}
+
+	var foreignKeys int
+	if err := db.QueryRow(`PRAGMA foreign_keys`).Scan(&foreignKeys); err != nil {
+		t.Fatal(err)
+	}
+	if foreignKeys != 1 {
+		t.Errorf("foreign_keys = %d, want 1", foreignKeys)
+	}
+}
+
+// TestParallelColdOpenContendsForDB exercises contention on the first Open of a
+// database file, where journal_mode is still the default and the conversion to
+// WAL must take a brief exclusive lock. TestParallelSubprocessesContendForDB
+// cannot reach that window: it seeds the database first, and seeding converts
+// the journal to WAL, so every later Open finds WAL established and the
+// journal_mode pragma becomes a no-op needing no lock.
+//
+// Four subprocesses are released from a shared wall-clock deadline so they
+// attempt the cold Open at the same instant rather than staggered by process
+// startup skew, and each creates the table and inserts inside one transaction.
+//
+// Measured caveat: as of 2026-10-02 this test does not reproduce the
+// "PRAGMA journal_mode = WAL: database is locked" failure from feedback
+// bbec89e6 even with the openPragmas order reverted to its pre-fix state
+// (0 failures in 10 synchronised runs). withBusyRetry's jittered backoff
+// appears to absorb the conversion window on this machine. The ordering is
+// still objectively wrong and is locked by
+// TestOpenAppliesBusyTimeoutBeforeJournalMode; this test guards cold-open
+// robustness generally rather than reproducing the original flake.
+func TestParallelColdOpenContendsForDB(t *testing.T) {
+	if os.Getenv("DEVDB_COLD_HARNESS") == "1" {
+		runColdOpenHarness()
+		return
+	}
+
+	dir := t.TempDir()
+	// Deliberately does not exist: no seed process, so journal_mode is still
+	// the default and the first Open has to convert it.
+	dbPath := filepath.Join(dir, "cold.db")
+
+	const writers = 4
+	deadline := time.Now().Add(3 * time.Second).UnixNano()
+
+	var wg sync.WaitGroup
+	errs := make([]error, writers)
+	for i := 0; i < writers; i++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			cmd := exec.Command(os.Args[0], "-test.run=^TestParallelColdOpenContendsForDB$")
+			cmd.Env = append(os.Environ(),
+				"DEVDB_COLD_HARNESS=1",
+				fmt.Sprintf("DEVDB_COLD_DB=%s", dbPath),
+				fmt.Sprintf("DEVDB_COLD_WRITER=%d", n),
+				fmt.Sprintf("DEVDB_COLD_DEADLINE_NS=%d", deadline),
+			)
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				errs[n] = fmt.Errorf("cold writer %d: %v\n%s", n, err, out)
+			}
+		}(i)
+	}
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	verify, err := Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer verify.Close()
+	var rows int
+	if err := verify.QueryRow(`SELECT COUNT(*) FROM writes`).Scan(&rows); err != nil {
+		t.Fatal(err)
+	}
+	if rows != writers {
+		t.Fatalf("rows=%d want %d (one per cold subprocess)", rows, writers)
+	}
+}
+
+func runColdOpenHarness() {
+	dbPath := os.Getenv("DEVDB_COLD_DB")
+	if dbPath == "" {
+		fmt.Fprintln(os.Stderr, "DEVDB_COLD_DB unset")
+		os.Exit(2)
+	}
+	if raw := os.Getenv("DEVDB_COLD_DEADLINE_NS"); raw != "" {
+		if deadline, err := strconv.ParseInt(raw, 10, 64); err == nil {
+			if wait := time.Unix(0, deadline).Sub(time.Now()); wait > 0 {
+				time.Sleep(wait)
+			}
+		}
+	}
+
+	db, err := Open(dbPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "open: %v\n", err)
+		os.Exit(3)
+	}
+	defer db.Close()
+
+	// The table is created here rather than seeded, so CREATE TABLE is part of
+	// the contended work. IF NOT EXISTS keeps it safe against the other writers.
+	if err := WithTx(db, func(tx *sql.Tx) error {
+		if _, err := tx.Exec(`CREATE TABLE IF NOT EXISTS writes (id INTEGER PRIMARY KEY AUTOINCREMENT, body TEXT)`); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`INSERT INTO writes(body) VALUES (?)`, fmt.Sprintf("cold-%s", os.Getenv("DEVDB_COLD_WRITER")))
+		return err
+	}); err != nil {
+		fmt.Fprintf(os.Stderr, "write: %v\n", err)
+		os.Exit(4)
 	}
 }
 
