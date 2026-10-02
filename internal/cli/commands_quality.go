@@ -72,7 +72,7 @@ func cmdReviewFinding(open opener) *cobra.Command {
 	var (
 		runID, filePath, principle, title, recommendation string
 		severity, confidence, effort                      string
-		lineStart, lineEnd                              int
+		lineStart, lineEnd                                int
 		hasLineStart, hasLineEnd                          bool
 	)
 	c := &cobra.Command{

@@ -31,14 +31,14 @@ type SyncResult struct {
 
 // ListEntry is one registered project with optional hub snapshot.
 type ListEntry struct {
-	Alias    string            `json:"alias"`
-	Root     string            `json:"root"`
-	DBPath   string            `json:"db_path"`
-	Exists   bool              `json:"exists"`
-	SyncedAt string            `json:"synced_at,omitempty"`
-	Status   string            `json:"status,omitempty"`
-	Counts   map[string]int    `json:"counts,omitempty"`
-	Snapshot *Snapshot         `json:"snapshot,omitempty"`
+	Alias    string         `json:"alias"`
+	Root     string         `json:"root"`
+	DBPath   string         `json:"db_path"`
+	Exists   bool           `json:"exists"`
+	SyncedAt string         `json:"synced_at,omitempty"`
+	Status   string         `json:"status,omitempty"`
+	Counts   map[string]int `json:"counts,omitempty"`
+	Snapshot *Snapshot      `json:"snapshot,omitempty"`
 }
 
 // DashboardRow is a compact hub dashboard line.
@@ -62,27 +62,27 @@ type DashboardRow struct {
 
 // ProjectDetail is hub drill-down for one project.
 type ProjectDetail struct {
-	Alias      string          `json:"alias"`
-	Root       string          `json:"root_path"`
-	DBPath     string          `json:"db_path"`
-	Status     string          `json:"status"`
-	SyncedAt   string          `json:"synced_at,omitempty"`
-	Snapshot   Snapshot        `json:"snapshot"`
-	Attention  []AttentionItem `json:"attention"`
+	Alias     string          `json:"alias"`
+	Root      string          `json:"root_path"`
+	DBPath    string          `json:"db_path"`
+	Status    string          `json:"status"`
+	SyncedAt  string          `json:"synced_at,omitempty"`
+	Snapshot  Snapshot        `json:"snapshot"`
+	Attention []AttentionItem `json:"attention"`
 }
 
 // DoctorRow is sync diagnostic for one project.
 type DoctorRow struct {
-	Alias            string `json:"alias"`
-	RootPath         string `json:"root_path"`
-	DBPath           string `json:"db_path"`
-	SourceExists     bool   `json:"source_exists"`
-	HubSyncedAt      string `json:"hub_synced_at,omitempty"`
-	HubStatus        string `json:"hub_status"`
-	SourceDBMTime    string `json:"source_db_mtime,omitempty"`
-	FreshnessStatus  string `json:"freshness_status"`
-	LastSyncError    string `json:"last_sync_error,omitempty"`
-	RecommendedCmd   string `json:"recommended_command"`
+	Alias           string `json:"alias"`
+	RootPath        string `json:"root_path"`
+	DBPath          string `json:"db_path"`
+	SourceExists    bool   `json:"source_exists"`
+	HubSyncedAt     string `json:"hub_synced_at,omitempty"`
+	HubStatus       string `json:"hub_status"`
+	SourceDBMTime   string `json:"source_db_mtime,omitempty"`
+	FreshnessStatus string `json:"freshness_status"`
+	LastSyncError   string `json:"last_sync_error,omitempty"`
+	RecommendedCmd  string `json:"recommended_command"`
 }
 
 // OpenHub opens (and migrates) the metadata hub database.

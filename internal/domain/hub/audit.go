@@ -26,17 +26,17 @@ var auditSectionOrder = []string{
 // auditKindAliases maps short user-facing kind names to canonical
 // section names. Both are accepted by AuditOptions.Kinds.
 var auditKindAliases = map[string]string{
-	"feedback":      "high_feedback",
-	"findings":      "high_findings",
-	"stale_arch":    "stale_arch",
-	"overdue":       "overdue_reminders",
-	"in_progress":   "in_progress",
-	"blocked":       "blocked",
-	"planned":       "planned_per_project",
-	"verification":  "stale_verification",
-	"high_feedback": "high_feedback",
-	"high_findings": "high_findings",
-	"overdue_reminders":  "overdue_reminders",
+	"feedback":            "high_feedback",
+	"findings":            "high_findings",
+	"stale_arch":          "stale_arch",
+	"overdue":             "overdue_reminders",
+	"in_progress":         "in_progress",
+	"blocked":             "blocked",
+	"planned":             "planned_per_project",
+	"verification":        "stale_verification",
+	"high_feedback":       "high_feedback",
+	"high_findings":       "high_findings",
+	"overdue_reminders":   "overdue_reminders",
 	"planned_per_project": "planned_per_project",
 	"stale_verification":  "stale_verification",
 }

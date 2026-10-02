@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	headingRE     = regexp.MustCompile(`^##\s+(.+?)\s*$`)
-	metaLineRE    = regexp.MustCompile(`^\s*-\s+\*\*([^*]+)\*\*:\s*(.*)\s*$`)
+	headingRE      = regexp.MustCompile(`^##\s+(.+?)\s*$`)
+	metaLineRE     = regexp.MustCompile(`^\s*-\s+\*\*([^*]+)\*\*:\s*(.*)\s*$`)
 	intentPrefixRE = regexp.MustCompile(`^(?P<intent>[a-z]+)(?:\([^)]+\))?:\s*`)
 )
 

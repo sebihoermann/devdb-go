@@ -9,7 +9,10 @@ import (
 func TestErrorPathsClosedDB(t *testing.T) {
 	db := testutil.ClosedDB(t)
 	calls := []func() error{
-		func() error { _, err := CreatePlan(db, CreatePlanInput{Slug: "x", Title: "x", ModelID: "t"}); return err },
+		func() error {
+			_, err := CreatePlan(db, CreatePlanInput{Slug: "x", Title: "x", ModelID: "t"})
+			return err
+		},
 		func() error { _, err := AddItem(db, AddItemInput{PlanID: "x", Title: "x", ModelID: "t"}); return err },
 		func() error { _, err := AddAcceptance(db, "x", "c", "t", 1); return err },
 		func() error { return SetItemStatus(db, "x", "open", "", "t") },
@@ -31,7 +34,10 @@ func TestErrorPathsClosedDB(t *testing.T) {
 		func() error { _, err := SetItemStatusExplicit(db, "x", "open", "", "t"); return err },
 		func() error { _, err := FindPlanTreeDrift(db, ""); return err },
 		func() error { _, err := ReconcilePlans(db, "", false); return err },
-		func() error { _, err := ScaffoldPlan(db, ScaffoldPlanInput{Slug: "s", Title: "t", ModelID: "t"}); return err },
+		func() error {
+			_, err := ScaffoldPlan(db, ScaffoldPlanInput{Slug: "s", Title: "t", ModelID: "t"})
+			return err
+		},
 		func() error { _, err := PromotePlan(db, "s", "t"); return err },
 		func() error { _, err := BackfillAcceptanceFromSpec(db, "M1", "/nope", "t"); return err },
 	}

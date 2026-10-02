@@ -573,11 +573,11 @@ func TestInProcessVerifyRecordWithInputs(t *testing.T) {
 
 func TestInProcessLegacySuggestionsExtended(t *testing.T) {
 	cases := map[string]string{
-		"work-on":               "plan item start",
-		"review-start":          "review start",
+		"work-on":                 "plan item start",
+		"review-start":            "review start",
 		"record-verification-run": "verify record",
-		"hub-dashboard":         "hub dashboard",
-		"diff-since":            "inventory diff",
+		"hub-dashboard":           "hub dashboard",
+		"diff-since":              "inventory diff",
 	}
 	for legacy, want := range cases {
 		sug := suggestCommand([]string{legacy})

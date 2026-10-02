@@ -347,7 +347,6 @@ func TestImportIntoEmptyGoDatabaseFile(t *testing.T) {
 	}
 }
 
-
 func TestImportPythonDBRejectsUnknownSource(t *testing.T) {
 	dir := t.TempDir()
 	dst := filepath.Join(dir, "dest.db")

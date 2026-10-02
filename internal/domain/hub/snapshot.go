@@ -37,13 +37,13 @@ type Snapshot struct {
 	GitAhead  int    `json:"git_ahead"`
 	GitBehind int    `json:"git_behind"`
 
-	WorkStatus       string `json:"work_status"`
-	StatusReason     string `json:"status_reason,omitempty"`
-	InProgressItems  int    `json:"in_progress_plan_items"`
-	OpenPlanItems    int    `json:"open_plan_items"`
-	OpenFeedback     int    `json:"open_feedback"`
-	InFlightTitle    string `json:"in_flight_title,omitempty"`
-	BlockedReason    string `json:"blocked_reason,omitempty"`
+	WorkStatus      string `json:"work_status"`
+	StatusReason    string `json:"status_reason,omitempty"`
+	InProgressItems int    `json:"in_progress_plan_items"`
+	OpenPlanItems   int    `json:"open_plan_items"`
+	OpenFeedback    int    `json:"open_feedback"`
+	InFlightTitle   string `json:"in_flight_title,omitempty"`
+	BlockedReason   string `json:"blocked_reason,omitempty"`
 
 	OpenHighFeedback int `json:"open_high_feedback"`
 	StaleArchNotes   int `json:"stale_arch_notes"`
@@ -61,8 +61,8 @@ type Snapshot struct {
 	FilesIndexed int `json:"files_indexed,omitempty"`
 	FilesChanged int `json:"files_changed,omitempty"`
 
-	AttentionScore  int             `json:"attention_score"`
-	AttentionItems  []AttentionItem `json:"attention_items,omitempty"`
+	AttentionScore int             `json:"attention_score"`
+	AttentionItems []AttentionItem `json:"attention_items,omitempty"`
 }
 
 // CollectSnapshot reads project state from disk and database.

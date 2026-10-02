@@ -21,7 +21,7 @@ func TestSplitStatementsLineCommentSemicolon(t *testing.T) {
 	}
 }
 
-// TestSplitStatementsSingleQuoteEscape verifies the SQL-standard `''` escape
+// TestSplitStatementsSingleQuoteEscape verifies the SQL-standard `”` escape
 // does not close the string literal — so a semicolon after a doubled quote is
 // still inside the literal and does not split.
 func TestSplitStatementsSingleQuoteEscape(t *testing.T) {
@@ -123,12 +123,12 @@ INSERT INTO "a;b" VALUES ('it''s;ok');
 // trailing semicolons, and whitespace-only fragments.
 func TestSplitStatementsEmptyAndTrailing(t *testing.T) {
 	cases := map[string][]string{
-		"":                      nil,
-		";":                     nil,
-		";;":                    nil,
-		"   ":                   nil,
-		"SELECT 1;":             {"SELECT 1"},
-		"SELECT 1; ":            {"SELECT 1"},
+		"":                       nil,
+		";":                      nil,
+		";;":                     nil,
+		"   ":                    nil,
+		"SELECT 1;":              {"SELECT 1"},
+		"SELECT 1; ":             {"SELECT 1"},
 		"SELECT 1;\nSELECT 2;\n": {"SELECT 1", "SELECT 2"},
 	}
 	for in, want := range cases {

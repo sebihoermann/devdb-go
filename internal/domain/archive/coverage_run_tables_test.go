@@ -30,7 +30,7 @@ func TestRunArchivesFeedbackStatusLogAndReview(t *testing.T) {
 	if res.ArchivedTotal < 2 {
 		t.Fatalf("run=%+v", res)
 	}
-	restored, err := Restore(db, RestoreOptions{Since: time.Now().UTC().Add(-72*time.Hour).Format(time.RFC3339Nano), KeepArchive: true})
+	restored, err := Restore(db, RestoreOptions{Since: time.Now().UTC().Add(-72 * time.Hour).Format(time.RFC3339Nano), KeepArchive: true})
 	if err != nil {
 		t.Fatal(err)
 	}

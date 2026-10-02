@@ -10,15 +10,15 @@ import (
 
 // Row is a reminder entry.
 type Row struct {
-	ID         string `json:"id"`
-	Title      string `json:"title"`
-	Body       string `json:"body,omitempty"`
-	DueAt      string `json:"due_at,omitempty"`
-	FilePath   string `json:"file_path,omitempty"`
-	PlanItemID string `json:"plan_item_id,omitempty"`
-	Status     string `json:"status"`
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Body        string `json:"body,omitempty"`
+	DueAt       string `json:"due_at,omitempty"`
+	FilePath    string `json:"file_path,omitempty"`
+	PlanItemID  string `json:"plan_item_id,omitempty"`
+	Status      string `json:"status"`
 	SnoozeUntil string `json:"snooze_until,omitempty"`
-	CreatedAt  string `json:"created_at"`
+	CreatedAt   string `json:"created_at"`
 }
 
 // AddInput for new reminders.
