@@ -84,6 +84,27 @@ func withBusyRetry(fn func() error) error {
 	return fmt.Errorf("storage: SQLITE_BUSY after %d attempts: %w", busyRetryAttempts, err)
 }
 
+// openPragmas is the ordered list of PRAGMAs applied to a devdb database at
+// Open time. The order is load-bearing and must not be rearranged.
+//
+//   - busy_timeout comes first. It is a per-connection setting, so it has to be
+//     in place before any statement that can take a lock; otherwise those
+//     statements run at the driver default timeout of ~0.
+//   - journal_mode = WAL is a file-level setting that needs a brief exclusive
+//     lock to convert the journal format. Applying it before busy_timeout meant
+//     it acquired that lock with no timeout at all, so concurrent devdb
+//     processes raced and lost at Open rather than at commit. That surfaced as
+//     "PRAGMA journal_mode = WAL: database is locked" from parallel
+//     `devdb plan acceptance meet` invocations.
+//   - foreign_keys is per-connection and lock-free, so it goes last.
+//
+// TestOpenAppliesBusyTimeoutBeforeJournalMode guards this ordering.
+var openPragmas = []string{
+	"PRAGMA busy_timeout = 5000",
+	"PRAGMA journal_mode = WAL",
+	"PRAGMA foreign_keys = ON",
+}
+
 // Open connects to a SQLite database with devdb pragmas applied.
 // Transient SQLITE_BUSY from PRAGMA setup is retried with bounded backoff
 // (and jitter) so concurrent agent invocations do not require a manual retry.
@@ -93,12 +114,7 @@ func Open(path string) (*sql.DB, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	pragmas := []string{
-		"PRAGMA foreign_keys = ON",
-		"PRAGMA journal_mode = WAL",
-		"PRAGMA busy_timeout = 5000",
-	}
-	for _, p := range pragmas {
+	for _, p := range openPragmas {
 		if err := withBusyRetry(func() error {
 			_, err := db.Exec(p)
 			return err
