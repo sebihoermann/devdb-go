@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/sebihoermann/devdb-go/internal/app"
 	"github.com/sebihoermann/devdb-go/internal/domain/analytics"
@@ -401,6 +402,32 @@ func cmdDoctor(open opener) *cobra.Command {
 		result["schema_kind"] = kind
 		result["schema_version"] = ver
 		result["db_status"] = "ok"
+		// Lock probe: fast write-lock check + name any process holding it.
+		// Closes plan item M5.1 (hermes-devdb-health): agents hitting a
+		// persistent SQLITE_BUSY should learn WHICH process to wait for.
+		if err := storage.ProbeWriteLock(ctx.Project.DBPath, 500*time.Millisecond); err != nil {
+			result["write_lock"] = "contended"
+			result["write_lock_error"] = err.Error()
+			if holders := storage.LockHolders(ctx.Project.DBPath); len(holders) > 0 {
+				result["lock_holders"] = holders
+			}
+			if ctx.Out.JSON {
+				return ctx.Out.PrintData(result)
+			}
+			lines := []string{
+				"doctor: db present but WRITE LOCK CONTENDED",
+				fmt.Sprintf("probe error: %v", err),
+			}
+			if holders := storage.LockHolders(ctx.Project.DBPath); len(holders) > 0 {
+				for _, h := range holders {
+					lines = append(lines, fmt.Sprintf("held by pid %d (%s) via %s", h.PID, h.Cmdline, h.File))
+				}
+			} else {
+				lines = append(lines, "no /proc holder found — lock may be stale; check for crashed processes")
+			}
+			return ctx.Out.PrintData(output.HumanLines{Lines: lines})
+		}
+		result["write_lock"] = "free"
 		if ctx.Out.JSON {
 			return ctx.Out.PrintData(result)
 		}
@@ -408,6 +435,7 @@ func cmdDoctor(open opener) *cobra.Command {
 			"doctor: ok",
 			fmt.Sprintf("schema: %s v%d", kind, ver),
 			fmt.Sprintf("db: %s", ctx.Project.DBPath),
+			"write lock: free",
 			"hygiene: devdb doctor hygiene",
 		}})
 	}
