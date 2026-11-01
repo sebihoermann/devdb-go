@@ -264,6 +264,7 @@ Hold these in mind so scripted use does not break:
 - **Severity measures debt, not importance.** `high`/`critical` mean "actionable defect that should block or be fixed"; a row whose fix has shipped or whose content is a *record* does not belong there. Three row classes are commonly mislabeled high: (1) **evidence records** — a milestone outcome, thesis revision, or model summary worth remembering (use `info`, category `evidence`); (2) **state records** — periodic cron/watchdog status snapshots like an ALERT reading (use `info`, put the alert level in the note or category, not in severity); (3) **verified-correct fact-check rows** — an audit that *confirmed* the claim (close the row; it is not debt). Reserve `high`/`critical` for rows where someone must still change an artifact. Symptom of drift: `hub audit` high-severity sections fill with records, and real defects stop being visible. Sweep rule: when `hub audit` shows a high/critical row that needs no artifact change, re-seed it with `devdb feedback severity <id> info --reason "..."` (stamps the old->new change plus reason into the row's context automatically).
 - **Category convention (`feedback add --category`).** Reach for: `correctness`, `convention`, `dx`, `docs`, `test-coverage`, `sprawl`, `dogfood`, `audit`, `skill`. Single word, kebab-case.
 - **Plan-item statuses.** `planned` → `in_progress` (set by `plan item start`) → `done` (close via `plan item close` or status after acceptance). Use `wontfix` for explicit cancel.
+- **Plan/goal deletion.** `plan delete <slug-or-id>` cascades the whole subtree in one FK-safe transaction; it refuses plans with in_progress items unless `--force` and previews counts with `--dry-run`. `goal delete <id>` removes the row. Prefer these verbs over hand-written SQL cascades (wrong delete order raises FOREIGN KEY constraint failed).
 
 ## Playbook 1: Log feedback
 
@@ -458,9 +459,9 @@ Federation queries (`hub across`) attach each project's `development.db` directl
 
 **Initialization:** `init`, `import python-db`
 
-**Planning:** `plan create|list|show|tree|status|scaffold|promote|reconcile` · `plan milestone add|list|status` · `plan item add|list|show|start|pause|close|status` · `plan acceptance add|meet|backfill` (run `meet` calls sequentially, not in parallel — see Closure ritual) · `plan file add`
+**Planning:** `plan create|list|show|tree|status|scaffold|promote|reconcile|delete` · `plan milestone add|list|status` · `plan item add|list|show|start|pause|close|status` · `plan acceptance add|meet|backfill` (run `meet` calls sequentially, not in parallel — see Closure ritual) · `plan file add`
 
-**Memory:** `feedback add|list|show|close|annotate|severity|import` · `goal add|list|set` · `feature add|list`
+**Memory:** `feedback add|list|show|close|annotate|severity|import` · `goal add|list|set|delete` · `feature add|list`
 
 **Architecture:** `arch add|list|show|update|verify|render`
 
