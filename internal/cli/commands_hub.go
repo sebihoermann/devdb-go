@@ -308,9 +308,14 @@ func cmdHubProject(openCtx opener) *cobra.Command {
 
 func cmdHubDoctor(openCtx opener) *cobra.Command {
 	var project string
+	var scanRaw string
 	c := &cobra.Command{
 		Use:   "doctor",
 		Short: "Diagnose hub sync freshness and dirty source markers",
+		Long: "Diagnoses registered projects (freshness, hub status, sync errors). " +
+			"With --scan DIR[,DIR...] also walks those directories for .devdb/development.db " +
+			"repos missing from the registry — audit and dashboards only see registered repos, " +
+			"so an unregistered ledger is invisible debt. Fix: devdb hub register --auto --scope DIR.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := openCtx(cmd)
 			if err != nil {
@@ -321,7 +326,20 @@ func cmdHubDoctor(openCtx opener) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			var unregistered []hub.UnregisteredRepo
+			if scanRaw != "" {
+				unregistered, err = hub.FindUnregistered(splitCSV(scanRaw), flagRegistry)
+				if err != nil {
+					return err
+				}
+			}
 			if ctx.Out.JSON {
+				if scanRaw != "" {
+					return ctx.Out.PrintData(map[string]any{
+						"projects":     rows,
+						"unregistered": unregistered,
+					})
+				}
 				return ctx.Out.PrintData(rows)
 			}
 			var lines []string
@@ -338,10 +356,22 @@ func cmdHubDoctor(openCtx opener) *cobra.Command {
 			if len(lines) == 0 {
 				lines = []string{"no registered projects"}
 			}
+			if scanRaw != "" {
+				if len(unregistered) == 0 {
+					lines = append(lines, "scan: no unregistered .devdb repos found")
+				} else {
+					lines = append(lines, fmt.Sprintf("scan: %d unregistered .devdb repo(s) — invisible to hub audit/dashboard:", len(unregistered)))
+					for _, u := range unregistered {
+						lines = append(lines, fmt.Sprintf("  %s (alias would be: %s)", u.Root, u.SuggestedAlias))
+					}
+					lines = append(lines, "  fix: devdb hub register --auto --scope <dir>  (or hub register <path> --alias <name>)")
+				}
+			}
 			return ctx.Out.PrintData(output.HumanLines{Lines: lines})
 		},
 	}
 	c.Flags().StringVar(&project, "project", "", "filter to one alias or path")
+	c.Flags().StringVar(&scanRaw, "scan", "", "comma-separated directories to walk for unregistered .devdb repos")
 	return c
 }
 
