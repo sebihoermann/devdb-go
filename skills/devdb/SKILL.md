@@ -261,7 +261,7 @@ Hold these in mind so scripted use does not break:
 - **Metadata hub.** `--metadata-db` and `DEVDB_METADATA_DB` override `~/.devdb/metadata.db`. `--no-metadata-push` and `DEVDB_DISABLE_METADATA_PUSH=1` skip opportunistic hub refresh after writes.
 - **Severity aliases.** `med` and `medium` are interchangeable; `info|low|med|medium|high|critical` are accepted and normalized.
 - **Severity scale.** `info` = note for completeness. `low` = clean up if nearby. `med` = real defect. `high` = correctness, security, or DX block. `critical` = production / data-loss class.
-- **Severity measures debt, not importance.** `high`/`critical` mean "actionable defect that should block or be fixed"; a row whose fix has shipped or whose content is a *record* does not belong there. Three row classes are commonly mislabeled high: (1) **evidence records** — a milestone outcome, thesis revision, or model summary worth remembering (use `info`, category `evidence`); (2) **state records** — periodic cron/watchdog status snapshots like an ALERT reading (use `info`, put the alert level in the note or category, not in severity); (3) **verified-correct fact-check rows** — an audit that *confirmed* the claim (close the row; it is not debt). Reserve `high`/`critical` for rows where someone must still change an artifact. Symptom of drift: `hub audit` high-severity sections fill with records, and real defects stop being visible. Sweep rule: when `hub audit` shows a high/critical row that needs no artifact change, re-seed its severity via SQL (`UPDATE feedback SET severity='info' WHERE id=?`) and note the reclassification in the row's annotation.
+- **Severity measures debt, not importance.** `high`/`critical` mean "actionable defect that should block or be fixed"; a row whose fix has shipped or whose content is a *record* does not belong there. Three row classes are commonly mislabeled high: (1) **evidence records** — a milestone outcome, thesis revision, or model summary worth remembering (use `info`, category `evidence`); (2) **state records** — periodic cron/watchdog status snapshots like an ALERT reading (use `info`, put the alert level in the note or category, not in severity); (3) **verified-correct fact-check rows** — an audit that *confirmed* the claim (close the row; it is not debt). Reserve `high`/`critical` for rows where someone must still change an artifact. Symptom of drift: `hub audit` high-severity sections fill with records, and real defects stop being visible. Sweep rule: when `hub audit` shows a high/critical row that needs no artifact change, re-seed it with `devdb feedback severity <id> info --reason "..."` (stamps the old->new change plus reason into the row's context automatically).
 - **Category convention (`feedback add --category`).** Reach for: `correctness`, `convention`, `dx`, `docs`, `test-coverage`, `sprawl`, `dogfood`, `audit`, `skill`. Single word, kebab-case.
 - **Plan-item statuses.** `planned` → `in_progress` (set by `plan item start`) → `done` (close via `plan item close` or status after acceptance). Use `wontfix` for explicit cancel.
 
@@ -273,6 +273,7 @@ devdb feedback add "..." --role user --severity ... --category ...
 devdb feedback add "..." --role codebase --severity ... --category ...
 devdb feedback close <id> --proposed-fix "..."
 devdb feedback annotate <id> --note "..."
+devdb feedback severity <id> <info|low|med|high|critical> --reason "..."   # re-seed a mislabeled row; stamps old->new into context
 devdb feedback import markdown path/to/archive.md
 devdb feedback import commits --branch feature/foo
 ```
@@ -459,7 +460,7 @@ Federation queries (`hub across`) attach each project's `development.db` directl
 
 **Planning:** `plan create|list|show|tree|status|scaffold|promote|reconcile` · `plan milestone add|list|status` · `plan item add|list|show|start|pause|close|status` · `plan acceptance add|meet|backfill` (run `meet` calls sequentially, not in parallel — see Closure ritual) · `plan file add`
 
-**Memory:** `feedback add|list|show|close|annotate|import` · `goal add|list|set` · `feature add|list`
+**Memory:** `feedback add|list|show|close|annotate|severity|import` · `goal add|list|set` · `feature add|list`
 
 **Architecture:** `arch add|list|show|update|verify|render`
 
