@@ -114,9 +114,11 @@ The skill is wasted if the ledger does not grow with the work.
 
 ## Hygiene rule
 
-A ledger nobody prunes becomes silt. Run `devdb archive gc --dry-run` at the start of any session whose `devdb report` shows a populated stale section. If the dry-run summary matches your expectations, run `devdb archive gc --yes` to archive feedback older than 30 days that's still open, and to resolve review findings on files no longer present in `repo_files`. Adjust the threshold with `--older-than DAYS` when needed.
+A ledger nobody prunes becomes silt. Run `devdb archive gc --dry-run` at the start of any session whose `devdb report` shows a populated stale section. If the dry-run summary matches your expectations, run `devdb archive gc` (no confirmation flag — unlike `archive run`, gc has no `--yes`; it writes directly, `--dry-run` is the preview) to archive feedback older than 30 days that's still open, and to resolve review findings on files no longer present in `repo_files`. Adjust the threshold with `--older-than DAYS` when needed.
 
 Archiving is reversible (`UPDATE feedback SET status='open' WHERE id=?`), so bias toward archiving aggressively.
+
+**gc is severity- and semantics-blind.** It closes *every* open feedback row older than the threshold — high-severity live debt and rows you deliberately left open (deferred verifications, worklists, state records) alike, stamping `proposed_fix` with a generic "closed by gc" only when the field is empty. Before a gc pass on a ledger with intentional open rows, snapshot them (`SELECT id, status, proposed_fix ... WHERE id IN (...)`), run gc, then restore (`UPDATE feedback SET status='open', proposed_fix=? WHERE id=?`). Verified 2026-10-31: a first gc pass across 18 repos closed 332 rows; the 38 deliberately-open research-dashboard rows were protected and restored with evidence text intact. Prefer fixing the classification debt (close what is fixed, re-seed records to info) *before* the first gc so the generic close stamp does not overwrite rows that deserved a real `--proposed-fix`.
 
 ### Heavy hygiene: `archive run` and `archive restore`
 
