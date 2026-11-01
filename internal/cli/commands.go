@@ -611,7 +611,7 @@ func cmdPlan(open opener) *cobra.Command {
 	plan := &cobra.Command{Use: "plan", Short: "Structured planning"}
 	plan.AddCommand(
 		cmdPlanCreate(open), cmdPlanList(open), cmdPlanShow(open), cmdPlanTree(open), cmdPlanStatus(open),
-		cmdPlanScaffold(open), cmdPlanPromote(open), cmdPlanReconcile(open),
+		cmdPlanScaffold(open), cmdPlanPromote(open), cmdPlanReconcile(open), cmdPlanDelete(open),
 	)
 	ms := &cobra.Command{Use: "milestone", Short: "Plan milestones"}
 	ms.AddCommand(cmdPlanMilestoneAdd(open), cmdPlanMilestoneList(open), cmdPlanMilestoneStatus(open))

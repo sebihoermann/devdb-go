@@ -19,7 +19,7 @@ import (
 
 func cmdGoal(open opener) *cobra.Command {
 	goal := &cobra.Command{Use: "goal", Short: "Project goals"}
-	goal.AddCommand(cmdGoalAdd(open), cmdGoalList(open), cmdGoalSet(open))
+	goal.AddCommand(cmdGoalAdd(open), cmdGoalList(open), cmdGoalSet(open), cmdGoalDelete(open))
 	return goal
 }
 
@@ -100,6 +100,31 @@ func cmdGoalSet(open opener) *cobra.Command {
 				return err
 			}
 			return ctx.Out.WriteResult(id, map[string]any{"kind": "goal", "action": "set"})
+		},
+	}
+}
+
+func cmdGoalDelete(open opener) *cobra.Command {
+	return &cobra.Command{
+		Use:   "delete ID",
+		Short: "Permanently remove a goal row",
+		Long: "Deletes the goal outright (the goals table has no children). For " +
+			"soft-closing finished work prefer `goal set ID done`.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx, err := open(cmd)
+			if err != nil {
+				return err
+			}
+			defer ctx.Close()
+			if err := ctx.RequireDB(); err != nil {
+				return err
+			}
+			id, err := goals.Delete(ctx.DB, args[0])
+			if err != nil {
+				return err
+			}
+			return ctx.Out.WriteResult(id, map[string]any{"kind": "goal", "action": "delete"})
 		},
 	}
 }
