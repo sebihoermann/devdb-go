@@ -61,7 +61,7 @@ devdb hub dashboard --view quality
 devdb hub dashboard --view work
 devdb hub dashboard --attention-only
 devdb hub project <alias>
-devdb hub doctor --json
+devdb hub doctor --json              # add --scan DIR[,DIR...] to also flag unregistered .devdb repos
 ```
 
 Register a repo once with `devdb hub register <path> --alias <name>` — that updates both `~/.devdb-projects` and the hub. `devdb hub list` reads from the hub when `metadata.db` exists.
@@ -431,7 +431,7 @@ devdb hub sync [--strict] [--json]
 devdb hub sync --watch --interval 60
 devdb hub dashboard [--view summary|work|delivery|quality] [--attention-only] [--json]
 devdb hub project <alias_or_path> [--json]
-devdb hub doctor [--json]
+devdb hub doctor [--json] [--scan DIR[,DIR...]]
 devdb hub across similar-feedback --keyword "import error"
 devdb hub across open-debt
 devdb hub audit [--severity <level>] [--kind <list>] [--project <alias>] [--cached] 
@@ -445,6 +445,8 @@ blocked, planned per project, stale verification. Replaces 30+ manual
 commands.
 
 Federation queries (`hub across`) attach each project's `development.db` directly — they do not read copied hub rows.
+
+`hub doctor --scan DIR[,DIR...]` walks the given directories for `.devdb/development.db` repos missing from the registry and prints the fix command (`hub register --auto --scope DIR`). Run it after cloning new repos or when `hub audit` looks suspiciously empty — unregistered ledgers are invisible debt (2026-10-31: 15 of 19 fleet repos were unregistered and silent in every hub view). Without `--scan` the output shape is unchanged.
 
 ## Other useful reads
 
