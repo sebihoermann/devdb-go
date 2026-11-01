@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/sebihoermann/devdb-go/internal/app"
 	"github.com/sebihoermann/devdb-go/internal/domain/analytics"
@@ -153,9 +154,14 @@ func cmdArchiveRestore(open opener) *cobra.Command {
 func cmdArchiveGC(open opener) *cobra.Command {
 	var olderThan int
 	var dryRun bool
+	var keepSeverity string
 	c := &cobra.Command{
 		Use:   "gc",
 		Short: "Prune stale open feedback and old dismissed reminders/tasks",
+		Long: "Closes open feedback older than --older-than days, except rows whose severity is " +
+			"protected (default: high,critical — stale high-severity rows are live debt, not silt). " +
+			"Use --keep-severity to change the protected set; --keep-severity \"\" protects nothing " +
+			"(legacy behavior). Dry-run lists the affected row ids.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -165,7 +171,24 @@ func cmdArchiveGC(open opener) *cobra.Command {
 			if err := ctx.RequireDB(); err != nil {
 				return err
 			}
-			res, err := archive.GC(ctx.DB, archive.GCOptions{OlderThanDays: olderThan, DryRun: dryRun})
+			opt := archive.GCOptions{OlderThanDays: olderThan, DryRun: dryRun}
+			if cmd.Flags().Changed("keep-severity") {
+				if strings.TrimSpace(keepSeverity) == "" {
+					opt.KeepSeverities = []string{} // protect nothing
+				} else {
+					for _, s := range strings.Split(keepSeverity, ",") {
+						s = strings.TrimSpace(s)
+						if s == "" {
+							continue
+						}
+						if err := validateEnum("keep-severity", s, []string{"info", "low", "med", "medium", "high", "critical"}); err != nil {
+							return err
+						}
+						opt.KeepSeverities = append(opt.KeepSeverities, s)
+					}
+				}
+			}
+			res, err := archive.GC(ctx.DB, opt)
 			if err != nil {
 				return err
 			}
@@ -173,21 +196,35 @@ func cmdArchiveGC(open opener) *cobra.Command {
 				return ctx.Out.PrintData(res)
 			}
 			if dryRun {
-				return ctx.Out.PrintData(output.HumanLines{Lines: []string{
+				lines := []string{
 					fmt.Sprintf("would close %d feedback (> %dd)", res.FeedbackToClose, res.OlderThanDays),
+				}
+				for _, id := range res.FeedbackIDs {
+					lines = append(lines, fmt.Sprintf("  [%s]", id))
+				}
+				if res.FeedbackProtected > 0 {
+					lines = append(lines, fmt.Sprintf("protected (severity floor): %d rows left open", res.FeedbackProtected))
+				}
+				lines = append(lines,
 					fmt.Sprintf("would wontfix %d findings on missing files", res.FindingsToWontfix),
 					fmt.Sprintf("would archive %d reminders · %d tasks", res.RemindersToArchive, res.TasksToArchive),
 					fmt.Sprintf("stale architecture notes: %d", res.StaleArchNotes),
-				}})
+				)
+				return ctx.Out.PrintData(output.HumanLines{Lines: lines})
 			}
-			return ctx.Out.PrintData(output.HumanLines{Lines: []string{
+			lines := []string{
 				fmt.Sprintf("closed %d feedback · wontfix %d findings", res.FeedbackClosed, res.FindingsResolved),
-				fmt.Sprintf("archived %d reminders · %d tasks", res.RemindersArchived, res.TasksArchived),
-			}})
+			}
+			if res.FeedbackProtected > 0 {
+				lines = append(lines, fmt.Sprintf("protected (severity floor): %d rows left open", res.FeedbackProtected))
+			}
+			lines = append(lines, fmt.Sprintf("archived %d reminders · %d tasks", res.RemindersArchived, res.TasksArchived))
+			return ctx.Out.PrintData(output.HumanLines{Lines: lines})
 		},
 	}
 	c.Flags().IntVar(&olderThan, "older-than", 30, "age threshold in days")
 	c.Flags().BoolVar(&dryRun, "dry-run", false, "preview without writing")
+	c.Flags().StringVar(&keepSeverity, "keep-severity", "high,critical", "comma-separated severities gc never closes (\"\" = protect nothing)")
 	return c
 }
 
