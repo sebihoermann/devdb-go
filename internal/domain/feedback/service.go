@@ -134,6 +134,47 @@ func Close(db *sql.DB, idPrefix, proposedFix, modelID string) (string, error) {
 	return id, err
 }
 
+// SetSeverity re-seeds a feedback row's severity (e.g. high -> info when a
+// row turns out to be an evidence/state record rather than actionable debt —
+// the severity contract in skills/devdb/SKILL.md). The old->new change plus
+// the optional reason are appended to context so the reclassification is
+// auditable from the row itself. Returns the resolved id and the previous
+// severity.
+func SetSeverity(db *sql.DB, idPrefix, severity, reason, modelID string) (string, string, error) {
+	ids, err := allIDs(db)
+	if err != nil {
+		return "", "", err
+	}
+	id, err := storage.ResolveID(idPrefix, ids)
+	if err != nil {
+		return "", "", err
+	}
+	var old string
+	if err := db.QueryRow(`SELECT COALESCE(severity,'') FROM feedback WHERE id=?`, id).Scan(&old); err != nil {
+		return "", "", err
+	}
+	normalized := normalizeSeverity(severity)
+	newSev, _ := normalized.(string)
+	if newSev == "" {
+		return "", "", fmt.Errorf("feedback: empty severity")
+	}
+	if _, err := db.Exec(`UPDATE feedback SET severity=? WHERE id=?`, newSev, id); err != nil {
+		return "", "", err
+	}
+	stamp := "[severity " + storage.NowUTC() + "] " + old + " -> " + newSev
+	if strings.TrimSpace(reason) != "" {
+		stamp += ": " + strings.TrimSpace(reason)
+	}
+	if _, err := db.Exec(`
+		UPDATE feedback SET context = CASE
+			WHEN context IS NULL OR context = '' THEN ?
+			ELSE context || char(10) || ?
+		END WHERE id=?`, stamp, stamp, id); err != nil {
+		return "", "", err
+	}
+	return id, old, nil
+}
+
 func allIDs(db *sql.DB) ([]string, error) {
 	rows, err := db.Query(`SELECT id FROM feedback`)
 	if err != nil {

@@ -454,8 +454,45 @@ func argvFlag(name string) string {
 func cmdFeedback(open opener) *cobra.Command {
 	feedbackCmd := &cobra.Command{Use: "feedback", Short: "Feedback and observations"}
 	feedbackCmd.AddCommand(cmdFeedbackAdd(open), cmdFeedbackList(open), cmdFeedbackShow(open),
-		cmdFeedbackClose(open), cmdFeedbackAnnotate(open), cmdFeedbackImport(open))
+		cmdFeedbackClose(open), cmdFeedbackAnnotate(open), cmdFeedbackSeverity(open), cmdFeedbackImport(open))
 	return feedbackCmd
+}
+
+func cmdFeedbackSeverity(open opener) *cobra.Command {
+	var reason string
+	c := &cobra.Command{
+		Use:   "severity ID LEVEL",
+		Short: "Re-seed a feedback row's severity (records are not debt)",
+		Long: "Sets a feedback row's severity to LEVEL (info|low|med|high|critical) and appends an " +
+			"auditable '[severity <ts>] old -> new: reason' stamp to the row's context. Use when a " +
+			"high/critical row turns out to be an evidence or state record rather than actionable " +
+			"defect — the severity contract reserves high/critical for rows where an artifact must " +
+			"still change.",
+		Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx, err := open(cmd)
+			if err != nil {
+				return err
+			}
+			defer ctx.Close()
+			if err := ctx.RequireDB(); err != nil {
+				return err
+			}
+			if err := validateEnum("severity", args[1], []string{"info", "low", "med", "medium", "high", "critical"}); err != nil {
+				return err
+			}
+			id, old, err := feedback.SetSeverity(ctx.DB, args[0], args[1], reason, ctx.ModelID)
+			if err != nil {
+				return err
+			}
+			ctx.Out.Hint("severity: %s -> %s", old, args[1])
+			return ctx.Out.WriteResult(id, map[string]any{
+				"kind": "feedback", "action": "severity", "old": old, "new": args[1],
+			})
+		},
+	}
+	c.Flags().StringVar(&reason, "reason", "", "why the severity changed (recorded in context)")
+	return c
 }
 
 func cmdFeedbackAdd(open opener) *cobra.Command {
