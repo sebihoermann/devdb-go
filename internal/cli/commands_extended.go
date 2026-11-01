@@ -744,9 +744,13 @@ func cmdPlanTree(open opener) *cobra.Command {
 }
 
 func cmdPlanStatus(open opener) *cobra.Command {
-	return &cobra.Command{
-		Use:   "status",
-		Short: "Plan delivery counts",
+	var global bool
+	c := &cobra.Command{
+		Use:   "status [SLUG_OR_ID]",
+		Short: "Plan delivery counts (scoped to the plan when SLUG_OR_ID is given)",
+		Long: "With a plan reference, counts that plan's items only. Without one (or with " +
+			"--global), counts every plan item in the ledger — the fleet dashboard view.",
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -756,14 +760,42 @@ func cmdPlanStatus(open opener) *cobra.Command {
 			if err := ctx.RequireDB(); err != nil {
 				return err
 			}
+			query := func(status string) string {
+				return `SELECT COUNT(*) FROM plan_items WHERE status='` + status + `'`
+			}
 			var planned, inProg, done int
-			_ = ctx.DB.QueryRow(`SELECT COUNT(*) FROM plan_items WHERE status='planned'`).Scan(&planned)
-			_ = ctx.DB.QueryRow(`SELECT COUNT(*) FROM plan_items WHERE status='in_progress'`).Scan(&inProg)
-			_ = ctx.DB.QueryRow(`SELECT COUNT(*) FROM plan_items WHERE status='done'`).Scan(&done)
+			if len(args) == 1 && !global {
+				planID, err := planning.ResolvePlanID(ctx.DB, args[0])
+				if err != nil {
+					return notFoundError(err.Error())
+				}
+				scoped := func(status string) {
+					var n int
+					_ = ctx.DB.QueryRow(
+						`SELECT COUNT(*) FROM plan_items WHERE status=? AND plan_id=?`, status, planID).Scan(&n)
+					switch status {
+					case "planned":
+						planned = n
+					case "in_progress":
+						inProg = n
+					case "done":
+						done = n
+					}
+				}
+				scoped("planned")
+				scoped("in_progress")
+				scoped("done")
+			} else {
+				_ = ctx.DB.QueryRow(query("planned")).Scan(&planned)
+				_ = ctx.DB.QueryRow(query("in_progress")).Scan(&inProg)
+				_ = ctx.DB.QueryRow(query("done")).Scan(&done)
+			}
 			payload := map[string]int{"planned": planned, "in_progress": inProg, "done": done}
 			return ctx.Out.PrintData(payload)
 		},
 	}
+	c.Flags().BoolVar(&global, "global", false, "aggregate across all plans even when a plan reference is given")
+	return c
 }
 
 func cmdPlanMilestoneAdd(open opener) *cobra.Command {
