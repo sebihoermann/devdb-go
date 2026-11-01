@@ -442,7 +442,7 @@ federation read by default (parity with `hub across`), `--cached` for
 hub-snapshot parity. Eight sections: high feedback, high review
 findings, stale arch notes, overdue reminders, in-progress plan items,
 blocked, planned per project, stale verification. Replaces 30+ manual
-commands.
+commands. Human output groups rows per project (group header carries the full count) and caps each group at 10 rows with an `...and K more` line; the global `--all` expands to uncapped. JSON output is always complete.
 
 Federation queries (`hub across`) attach each project's `development.db` directly — they do not read copied hub rows.
 
