@@ -711,6 +711,7 @@ func cmdPlanItemAdd(open opener) *cobra.Command {
 				id, err = planning.AddItem(ctx.DB, planning.AddItemInput{
 					PlanID: planID, MilestoneID: milestoneID,
 					Title: title, Body: body, MemoryRef: memoryRef, ModelID: ctx.ModelID,
+					Phase: phase, Step: step,
 				})
 			}
 			if err != nil {
@@ -723,9 +724,9 @@ func cmdPlanItemAdd(open opener) *cobra.Command {
 	c.Flags().StringVar(&milestoneID, "milestone", "", "milestone id")
 	c.Flags().StringVar(&body, "body", "", "item body")
 	c.Flags().StringVar(&memoryRef, "memory-ref", "", "optional memory anchor such as MEMORY.md#section or memory/YYYY-MM-DD.md")
-	c.Flags().BoolVar(&legacy, "legacy", false, "create legacy flat item (phase/step)")
-	c.Flags().StringVar(&phase, "phase", "", "legacy phase label")
-	c.Flags().StringVar(&step, "step", "", "legacy step label")
+	c.Flags().BoolVar(&legacy, "legacy", false, "create legacy flat item (no plan/milestone)")
+	c.Flags().StringVar(&phase, "phase", "", "optional phase label; rendered as \"[phase] title\" in plan tree")
+	c.Flags().StringVar(&step, "step", "", "optional step label within the phase; renders as \"[phase.step] title\"")
 	return c
 }
 
