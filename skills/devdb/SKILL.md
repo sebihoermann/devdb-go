@@ -118,7 +118,7 @@ A ledger nobody prunes becomes silt. Run `devdb archive gc --dry-run` at the sta
 
 Archiving is reversible (`UPDATE feedback SET status='open' WHERE id=?`), so bias toward archiving aggressively.
 
-**gc is severity- and semantics-blind.** It closes *every* open feedback row older than the threshold — high-severity live debt and rows you deliberately left open (deferred verifications, worklists, state records) alike, stamping `proposed_fix` with a generic "closed by gc" only when the field is empty. Before a gc pass on a ledger with intentional open rows, snapshot them (`SELECT id, status, proposed_fix ... WHERE id IN (...)`), run gc, then restore (`UPDATE feedback SET status='open', proposed_fix=? WHERE id=?`). Verified 2026-10-31: a first gc pass across 18 repos closed 332 rows; the 38 deliberately-open research-dashboard rows were protected and restored with evidence text intact. Prefer fixing the classification debt (close what is fixed, re-seed records to info) *before* the first gc so the generic close stamp does not overwrite rows that deserved a real `--proposed-fix`.
+**gc has a severity floor.** Since commit 0927590 it never closes rows at or above `--keep-severity` (default `high,critical`) — stale high-severity rows are live debt, not silt. `--keep-severity ""` restores the legacy close-everything behavior; `--dry-run` lists the exact row ids it would close plus the protected count. Before the floor existed (pre-2026-11), a gc pass closed *every* stale open row regardless of severity — a fleet pass on 2026-10-31 closed 332 rows and 38 deliberately-open research-dashboard rows survived only via a caller-side snapshot/restore. If you ever run gc on an old binary, or with `--keep-severity ""`, keep that protection recipe: snapshot (`SELECT id, status, proposed_fix ... WHERE id IN (...)`), gc, restore (`UPDATE feedback SET status='open', proposed_fix=? WHERE id=?`). Also prefer fixing classification debt (close what is fixed, re-seed records to info) *before* a first gc so the generic "closed by gc" stamp does not overwrite rows that deserved a real `--proposed-fix`.
 
 ### Heavy hygiene: `archive run` and `archive restore`
 
@@ -475,7 +475,7 @@ Federation queries (`hub across`) attach each project's `development.db` directl
 
 **Hygiene / analytics:** `archive run|list|restore|gc` · `analytics missed|summary` · `ledger housekeeping` (bundled archive + reconcile + scan + optional verify)
 
-**Reads:** `status`, `quality`, `report`, `resume`, `doctor`, `help`, `list`, `show`
+**Reads:** `status`, `quality`, `report`, `resume`, `doctor`, `help`, `list`, `show` · `plan status <slug-or-id>` is scoped per plan since 9347a13 (no-arg or `--global` = fleet aggregate; unknown ref exits non-zero)
 
 Global flags: `--repo` (alias: `--repo-root`), `--db`, `--json`, `--all`, `--verbose`, `--metadata-db`, `--no-metadata-push`.
 
