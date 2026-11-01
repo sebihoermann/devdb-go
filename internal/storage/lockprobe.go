@@ -59,7 +59,7 @@ func LockHolders(dbPath string) []LockHolder {
 		return nil
 	}
 	targets := map[string]bool{
-		abs:         true,
+		abs:          true,
 		abs + "-wal": true,
 		abs + "-shm": true,
 	}

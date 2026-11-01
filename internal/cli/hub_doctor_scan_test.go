@@ -79,7 +79,7 @@ func TestHubDoctorScanUnregistered(t *testing.T) {
 
 	// CLI JSON shape: {projects, unregistered}.
 	var js struct {
-		Projects     []map[string]any     `json:"projects"`
+		Projects     []map[string]any       `json:"projects"`
 		Unregistered []hub.UnregisteredRepo `json:"unregistered"`
 	}
 	jsonOut := runCLIOut(t, append(hubArgs, "--json", "doctor", "--scan", scope)...)
