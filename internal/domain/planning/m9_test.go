@@ -28,7 +28,7 @@ func TestScaffoldDesignAndPromote(t *testing.T) {
 
 	result, err := planning.ScaffoldPlan(db, planning.ScaffoldPlanInput{
 		Title: "Test Feature", Slug: "test-feature", Mode: "design",
-		MilestoneCount: 2, RepoRoot: repo, ModelID: "test",
+		MilestoneCount: 2, RepoRoot: repo, ModelID: "test", WithImplementItems: true,
 	})
 	if err != nil {
 		t.Fatal(err)

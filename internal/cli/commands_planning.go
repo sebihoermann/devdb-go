@@ -14,6 +14,7 @@ func cmdPlanScaffold(open opener) *cobra.Command {
 	var slug, body, mode, outputPath string
 	var milestoneCount int
 	var skipAcceptance bool
+	var withImplementItems bool
 	c := &cobra.Command{
 		Use:   "scaffold TITLE",
 		Short: "Create plan skeleton and HTML artifact",
@@ -31,7 +32,7 @@ func cmdPlanScaffold(open opener) *cobra.Command {
 				Title: strings.Join(args, " "), Slug: slug, Body: body, Mode: mode,
 				MilestoneCount: milestoneCount, OutputPath: outputPath,
 				RepoRoot: ctx.Project.RepoRoot, SkipAcceptance: skipAcceptance,
-				ModelID: ctx.ModelID,
+				ModelID: ctx.ModelID, WithImplementItems: withImplementItems,
 			})
 			if err != nil {
 				if errors.Is(err, planning.ErrSlugExists) {
@@ -57,6 +58,7 @@ func cmdPlanScaffold(open opener) *cobra.Command {
 	c.Flags().IntVar(&milestoneCount, "milestones", 4, "number of milestones")
 	c.Flags().StringVar(&outputPath, "output", "", "HTML artifact path (default: docs/<slug>-implementation-plan.html)")
 	c.Flags().BoolVar(&skipAcceptance, "skip-acceptance", false, "omit default acceptance criteria")
+	c.Flags().BoolVar(&withImplementItems, "with-implement-items", false, "also create one auto 'Implement/Design Milestone N' item per milestone (legacy shape; default off)")
 	return c
 }
 

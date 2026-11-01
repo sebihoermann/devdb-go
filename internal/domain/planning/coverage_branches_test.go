@@ -90,7 +90,7 @@ func TestPromotePlanAndResolveItemID(t *testing.T) {
 	repo := t.TempDir()
 	skip, err := ScaffoldPlan(db, ScaffoldPlanInput{
 		Title: "Promote", Slug: "promote-me", Mode: "implement",
-		MilestoneCount: 2, RepoRoot: repo, ModelID: "test",
+		MilestoneCount: 2, RepoRoot: repo, ModelID: "test", WithImplementItems: true,
 	})
 	if err != nil {
 		t.Fatal(err)
