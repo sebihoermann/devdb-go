@@ -48,6 +48,9 @@ func Add(db *sql.DB, in AddInput) (string, error) {
 }
 
 // List returns open or all feedback rows. limit 0 means no cap.
+// The "all" sentinel means "no status filter" — same contract as
+// goals.List, tasks.List and reminders.List. Passing it through literally
+// would filter for status='all' and match nothing.
 func List(db *sql.DB, status string, limit int) ([]Row, error) {
 	if limit < 0 {
 		limit = 20
@@ -55,7 +58,7 @@ func List(db *sql.DB, status string, limit int) ([]Row, error) {
 	q := `SELECT id, role, category, severity, note, context, status, COALESCE(proposed_fix,''), created_at
 	      FROM feedback`
 	args := []any{}
-	if status != "" {
+	if status != "" && status != "all" {
 		q += ` WHERE status = ?`
 		args = append(args, status)
 	}
