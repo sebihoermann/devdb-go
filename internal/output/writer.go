@@ -81,7 +81,11 @@ func (w *Writer) printHuman(v any) error {
 		}
 		return nil
 	default:
-		b, err := json.Marshal(v)
+		// Same contract as the --json path: a list command must never print
+		// "null" for an empty result — it prints "[]". Without this, an empty
+		// result and a filter that matched nothing look identical, which
+		// hides bugs like a status sentinel filtering on the literal "all".
+		b, err := json.Marshal(stableJSONValue(v))
 		if err != nil {
 			return err
 		}
