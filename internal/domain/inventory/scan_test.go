@@ -13,13 +13,13 @@ import (
 func TestDiscoverFilesWalkMode(t *testing.T) {
 	repo := t.TempDir()
 	files := map[string]string{
-		"pkg/main.go":          "package main\n",
-		"tests/test_foo.py":    "def test_x(): pass\n",
-		"README.md":            "# readme\n",
-		"CLAUDE.md":            "# agent\n",
-		"pyproject.toml":       "[tool]\n",
-		".gitignore":           "node_modules/\n",
-		"node_modules/x.js":    "x\n", // ignored dir
+		"pkg/main.go":       "package main\n",
+		"tests/test_foo.py": "def test_x(): pass\n",
+		"README.md":         "# readme\n",
+		"CLAUDE.md":         "# agent\n",
+		"pyproject.toml":    "[tool]\n",
+		".gitignore":        "node_modules/\n",
+		"node_modules/x.js": "x\n", // ignored dir
 	}
 	for rel, content := range files {
 		p := filepath.Join(repo, rel)

@@ -380,8 +380,8 @@ func cmdApprovalRequest(open opener) *cobra.Command {
 func cmdApprovalApprove(open opener) *cobra.Command {
 	var table, note string
 	c := &cobra.Command{
-		Use:   "approve ENTITY_ID",
-		Args:  cobra.ExactArgs(1),
+		Use:  "approve ENTITY_ID",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -409,8 +409,8 @@ func cmdApprovalApprove(open opener) *cobra.Command {
 func cmdApprovalReject(open opener) *cobra.Command {
 	var table, note string
 	c := &cobra.Command{
-		Use:   "reject ENTITY_ID",
-		Args:  cobra.ExactArgs(1),
+		Use:  "reject ENTITY_ID",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -438,8 +438,8 @@ func cmdApprovalReject(open opener) *cobra.Command {
 func cmdApprovalWithdraw(open opener) *cobra.Command {
 	var table, note string
 	c := &cobra.Command{
-		Use:   "withdraw ENTITY_ID",
-		Args:  cobra.ExactArgs(1),
+		Use:  "withdraw ENTITY_ID",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -518,8 +518,8 @@ func cmdReminder(open opener) *cobra.Command {
 func cmdReminderAdd(open opener) *cobra.Command {
 	var body, due, file, planItem string
 	c := &cobra.Command{
-		Use:   "add TITLE",
-		Args:  cobra.MinimumNArgs(1),
+		Use:  "add TITLE",
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -550,7 +550,7 @@ func cmdReminderList(open opener) *cobra.Command {
 	var st string
 	var overdue bool
 	c := &cobra.Command{
-		Use:   "list",
+		Use: "list",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -577,8 +577,8 @@ func cmdReminderList(open opener) *cobra.Command {
 
 func cmdReminderShow(open opener) *cobra.Command {
 	return &cobra.Command{
-		Use:   "show ID",
-		Args:  cobra.ExactArgs(1),
+		Use:  "show ID",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -599,8 +599,8 @@ func cmdReminderShow(open opener) *cobra.Command {
 
 func cmdReminderDismiss(open opener) *cobra.Command {
 	return &cobra.Command{
-		Use:   "dismiss ID",
-		Args:  cobra.ExactArgs(1),
+		Use:  "dismiss ID",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -622,8 +622,8 @@ func cmdReminderDismiss(open opener) *cobra.Command {
 func cmdReminderSnooze(open opener) *cobra.Command {
 	var until string
 	c := &cobra.Command{
-		Use:   "snooze ID",
-		Args:  cobra.ExactArgs(1),
+		Use:  "snooze ID",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -646,8 +646,8 @@ func cmdReminderSnooze(open opener) *cobra.Command {
 
 func cmdReminderUnsnooze(open opener) *cobra.Command {
 	return &cobra.Command{
-		Use:   "unsnooze ID",
-		Args:  cobra.ExactArgs(1),
+		Use:  "unsnooze ID",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -827,8 +827,8 @@ func cmdPlanMilestoneAdd(open opener) *cobra.Command {
 	var planID, body string
 	var number int
 	c := &cobra.Command{
-		Use:   "add TITLE",
-		Args:  cobra.MinimumNArgs(1),
+		Use:  "add TITLE",
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -862,7 +862,7 @@ func cmdPlanMilestoneAdd(open opener) *cobra.Command {
 func cmdPlanMilestoneList(open opener) *cobra.Command {
 	var planID string
 	c := &cobra.Command{
-		Use:   "list",
+		Use: "list",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -896,8 +896,8 @@ func cmdPlanMilestoneList(open opener) *cobra.Command {
 
 func cmdPlanMilestoneStatus(open opener) *cobra.Command {
 	return &cobra.Command{
-		Use:   "status ID STATUS",
-		Args:  cobra.ExactArgs(2),
+		Use:  "status ID STATUS",
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -922,7 +922,7 @@ func cmdPlanMilestoneStatus(open opener) *cobra.Command {
 func cmdPlanFileAdd(open opener) *cobra.Command {
 	var planItem, path, role string
 	c := &cobra.Command{
-		Use:   "add",
+		Use: "add",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -952,7 +952,7 @@ func cmdPlanItemList(open opener) *cobra.Command {
 	var planID, milestoneID, st string
 	var legacy bool
 	c := &cobra.Command{
-		Use:   "list",
+		Use: "list",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -994,8 +994,8 @@ func cmdPlanItemList(open opener) *cobra.Command {
 func cmdPlanItemStatus(open opener) *cobra.Command {
 	var note string
 	c := &cobra.Command{
-		Use:   "status ID STATUS",
-		Args:  cobra.ExactArgs(2),
+		Use:  "status ID STATUS",
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {

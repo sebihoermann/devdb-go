@@ -74,8 +74,8 @@ func cmdFeedbackImportCommits(open opener) *cobra.Command {
 func emitFeedbackImportResult(ctx *app.Context, count int, ids []string, verb, kind string) error {
 	if ctx.Out.JSON {
 		return ctx.Out.PrintData(map[string]any{
-			verb: count,
-			"ids": ids,
+			verb:   count,
+			"ids":  ids,
 			"kind": kind,
 		})
 	}

@@ -12,12 +12,12 @@ const grassCutterFileCap = 50
 
 // RunResult is the outcome of a grass-cutter pass.
 type RunResult struct {
-	RunID       string              `json:"run_id,omitempty"`
-	Candidates  []Candidate         `json:"candidates"`
-	Counts      map[string]int      `json:"counts"`
-	Summary     string              `json:"summary"`
-	Persisted   bool                `json:"persisted"`
-	PersistedN  int                 `json:"persisted_count,omitempty"`
+	RunID      string         `json:"run_id,omitempty"`
+	Candidates []Candidate    `json:"candidates"`
+	Counts     map[string]int `json:"counts"`
+	Summary    string         `json:"summary"`
+	Persisted  bool           `json:"persisted"`
+	PersistedN int            `json:"persisted_count,omitempty"`
 }
 
 // Run discovers heuristic candidates and optionally opens a grass-cutter review run.

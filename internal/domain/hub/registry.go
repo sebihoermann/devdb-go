@@ -10,10 +10,10 @@ import (
 
 // RegisteredProject is one federation registry entry.
 type RegisteredProject struct {
-	Alias   string `json:"alias"`
-	Root    string `json:"root"`
-	DBPath  string `json:"db_path"`
-	Exists  bool   `json:"exists"`
+	Alias  string `json:"alias"`
+	Root   string `json:"root"`
+	DBPath string `json:"db_path"`
+	Exists bool   `json:"exists"`
 }
 
 // ReadRegistry parses ~/.devdb-projects.

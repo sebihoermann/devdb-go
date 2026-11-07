@@ -66,7 +66,6 @@ func TestGCClosedDB(t *testing.T) {
 	}
 }
 
-
 func TestCountLocSnapshotsBoost(t *testing.T) {
 	db, _ := testutil.TempDB(t)
 	if _, err := db.Exec(`CREATE TABLE loc_snapshots (

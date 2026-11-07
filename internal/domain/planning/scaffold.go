@@ -153,8 +153,8 @@ func ScaffoldPlan(db *sql.DB, in ScaffoldPlanInput) (ScaffoldPlanResult, error) 
 		}
 		itemID, err := AddStructuredItem(db, StructuredItemInput{
 			PlanID: planID, MilestoneID: msID,
-			Title: fmt.Sprintf("%s %s", itemVerb, title),
-			Body:  fmt.Sprintf("Cover milestone %d. Link artifact: %s", n, relArtifact),
+			Title:     fmt.Sprintf("%s %s", itemVerb, title),
+			Body:      fmt.Sprintf("Cover milestone %d. Link artifact: %s", n, relArtifact),
 			SourceDoc: relArtifact, ModelID: in.ModelID,
 		})
 		if err != nil {
