@@ -14,6 +14,7 @@ func cmdPlanScaffold(open opener) *cobra.Command {
 	var slug, body, mode, outputPath string
 	var milestoneCount int
 	var skipAcceptance bool
+	var withImplementItems bool
 	c := &cobra.Command{
 		Use:   "scaffold TITLE",
 		Short: "Create plan skeleton and HTML artifact",
@@ -31,7 +32,7 @@ func cmdPlanScaffold(open opener) *cobra.Command {
 				Title: strings.Join(args, " "), Slug: slug, Body: body, Mode: mode,
 				MilestoneCount: milestoneCount, OutputPath: outputPath,
 				RepoRoot: ctx.Project.RepoRoot, SkipAcceptance: skipAcceptance,
-				ModelID: ctx.ModelID,
+				ModelID: ctx.ModelID, WithImplementItems: withImplementItems,
 			})
 			if err != nil {
 				if errors.Is(err, planning.ErrSlugExists) {
@@ -57,6 +58,7 @@ func cmdPlanScaffold(open opener) *cobra.Command {
 	c.Flags().IntVar(&milestoneCount, "milestones", 4, "number of milestones")
 	c.Flags().StringVar(&outputPath, "output", "", "HTML artifact path (default: docs/<slug>-implementation-plan.html)")
 	c.Flags().BoolVar(&skipAcceptance, "skip-acceptance", false, "omit default acceptance criteria")
+	c.Flags().BoolVar(&withImplementItems, "with-implement-items", false, "also create one auto 'Implement/Design Milestone N' item per milestone (legacy shape; default off)")
 	return c
 }
 
@@ -154,6 +156,58 @@ func cmdPlanReconcile(open opener) *cobra.Command {
 	}
 	c.Flags().StringVar(&planRef, "plan", "", "limit to one plan slug or id")
 	c.Flags().BoolVar(&apply, "apply", false, "repair drifted statuses")
+	return c
+}
+
+func cmdPlanDelete(open opener) *cobra.Command {
+	var dryRun, force bool
+	c := &cobra.Command{
+		Use:   "delete SLUG_OR_ID",
+		Short: "Delete a plan and its whole subtree",
+		Long: "Removes the plan cascade in one transaction (acceptance criteria, item files, " +
+			"status log, items, milestones, then the plan). Refuses when items are in_progress " +
+			"unless --force. Preview with --dry-run: prints the cascade counts without writing. " +
+			"Replaces the hand-ordered raw-SQL cascade recipe (skill pitfall 10).",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx, err := open(cmd)
+			if err != nil {
+				return err
+			}
+			defer ctx.Close()
+			if err := ctx.RequireDB(); err != nil {
+				return err
+			}
+			res, err := planning.DeletePlan(ctx.DB, args[0], planning.DeletePlanInput{Force: force, DryRun: dryRun})
+			if err != nil {
+				if errors.Is(err, planning.ErrPlanNotFound) {
+					return notFoundError("plan not found: " + args[0])
+				}
+				if errors.Is(err, planning.ErrPlanInProgress) {
+					return &CLIError{
+						Code:       ExitInvalidValue,
+						Message:    fmt.Sprintf("plan %s has %d in_progress item(s) — an agent may be mid-task", res.Slug, res.InProgressItems),
+						Suggestion: "pause or close the items first, or pass --force",
+						Kind:       "invalid_argument",
+					}
+				}
+				return err
+			}
+			if ctx.Out.JSON {
+				return ctx.Out.PrintData(res)
+			}
+			verb := "deleted"
+			if dryRun {
+				verb = "would delete"
+			}
+			return ctx.Out.PrintData(output.HumanLines{Lines: []string{
+				fmt.Sprintf("%s plan %s (%s): %d acceptance, %d files, %d status-log rows, %d items, %d milestones",
+					verb, res.Title, res.Slug, res.Acceptance, res.Files, res.StatusLog, res.Items, res.Milestones),
+			}})
+		},
+	}
+	c.Flags().BoolVar(&dryRun, "dry-run", false, "preview cascade counts without writing")
+	c.Flags().BoolVar(&force, "force", false, "delete even when items are in_progress")
 	return c
 }
 

@@ -78,7 +78,7 @@ func TestPromotePlanRewritesDesignTitles(t *testing.T) {
 	repo := t.TempDir()
 	res, err := ScaffoldPlan(db, ScaffoldPlanInput{
 		Title: "Promote Me", Slug: "promote-me", Mode: "design",
-		MilestoneCount: 1, RepoRoot: repo, ModelID: "test",
+		MilestoneCount: 1, RepoRoot: repo, ModelID: "test", WithImplementItems: true,
 	})
 	if err != nil {
 		t.Fatal(err)

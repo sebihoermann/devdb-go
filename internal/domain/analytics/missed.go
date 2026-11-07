@@ -41,12 +41,12 @@ func nullIfEmpty(s string) any {
 
 // MissedRow is one failed CLI invocation.
 type MissedRow struct {
-	ID                string `json:"id"`
-	CreatedAt         string `json:"created_at"`
-	FailureKind       string `json:"failure_kind"`
-	RawArgv           string `json:"raw_argv"`
-	ErrorMessage      string `json:"error_message"`
-	SuggestedCommand  string `json:"suggested_command,omitempty"`
+	ID               string `json:"id"`
+	CreatedAt        string `json:"created_at"`
+	FailureKind      string `json:"failure_kind"`
+	RawArgv          string `json:"raw_argv"`
+	ErrorMessage     string `json:"error_message"`
+	SuggestedCommand string `json:"suggested_command,omitempty"`
 }
 
 // ListMissedCalls returns recent missed CLI calls.
@@ -148,11 +148,11 @@ func MissedSummary(db *sql.DB, since string, windowDays int) (Summary, error) {
 
 // HygieneReport is per-repo CLI hygiene diagnostics.
 type HygieneReport struct {
-	MissedCalls7d     int            `json:"missed_cli_calls_7d"`
-	TopFailureKinds   []KindCount    `json:"top_failure_kinds"`
-	TopCommands       []CommandCount `json:"top_commands"`
-	ActiveArchNotes   int            `json:"active_arch_notes"`
-	Recommendations   []string       `json:"recommendations"`
+	MissedCalls7d   int            `json:"missed_cli_calls_7d"`
+	TopFailureKinds []KindCount    `json:"top_failure_kinds"`
+	TopCommands     []CommandCount `json:"top_commands"`
+	ActiveArchNotes int            `json:"active_arch_notes"`
+	Recommendations []string       `json:"recommendations"`
 }
 
 // Hygiene builds doctor hygiene diagnostics.

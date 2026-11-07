@@ -19,12 +19,12 @@ func (e *CLIError) Error() string {
 }
 
 const (
-	ExitOK            = 0
-	ExitGeneral       = 1
-	ExitUsage         = 2
-	ExitNotFound      = 3
-	ExitSchema        = 4
-	ExitInvalidValue  = 5
+	ExitOK           = 0
+	ExitGeneral      = 1
+	ExitUsage        = 2
+	ExitNotFound     = 3
+	ExitSchema       = 4
+	ExitInvalidValue = 5
 )
 
 func usageError(msg string) *CLIError {
@@ -51,51 +51,51 @@ func suggestCommand(argv []string) string {
 		return "devdb help"
 	}
 	legacy := map[string]string{
-		"init":                  "devdb init",
-		"work-on":               "devdb plan item start",
-		"pause-on":              "devdb plan item pause",
-		"resume":                "devdb resume",
-		"feedback-user":         "devdb feedback add --role user",
-		"feedback-model":        "devdb feedback add --role model",
-		"feedback-codebase":     "devdb feedback add --role codebase",
-		"import-feedback-md":    "devdb feedback import markdown",
-		"import-branch-commits": "devdb feedback import commits",
-		"create-plan":           "devdb plan create",
-		"scaffold-plan":         "devdb plan scaffold",
-		"promote-plan":          "devdb plan promote",
-		"reconcile-plans":       "devdb plan reconcile",
-		"backfill-acceptance":   "devdb plan acceptance backfill",
-		"show-plan-item":        "devdb plan item show",
-		"list-missed-calls":     "devdb analytics missed",
-		"missed-calls-summary":  "devdb analytics summary",
-		"gc":                    "devdb archive gc",
-		"restore":               "devdb archive restore",
-		"restore-list":          "devdb archive list",
-		"scan":                  "devdb inventory scan",
-		"context":               "devdb inventory context",
-		"diff-since":            "devdb inventory diff",
-		"suggest-cuts":          "devdb inventory suggest-cuts",
-		"add-arch-note":         "devdb arch add",
-		"list-arch-notes":       "devdb arch list",
-		"verify-arch-note":      "devdb arch verify",
-		"arch-render":           "devdb arch render",
-		"review-start":          "devdb review start",
-		"review-add-finding":    "devdb review finding",
-		"review-finish":         "devdb review finish",
-		"review-list":           "devdb review list",
-		"review-resolve":        "devdb review resolve",
-		"review-report":         "devdb review report",
+		"init":                    "devdb init",
+		"work-on":                 "devdb plan item start",
+		"pause-on":                "devdb plan item pause",
+		"resume":                  "devdb resume",
+		"feedback-user":           "devdb feedback add --role user",
+		"feedback-model":          "devdb feedback add --role model",
+		"feedback-codebase":       "devdb feedback add --role codebase",
+		"import-feedback-md":      "devdb feedback import markdown",
+		"import-branch-commits":   "devdb feedback import commits",
+		"create-plan":             "devdb plan create",
+		"scaffold-plan":           "devdb plan scaffold",
+		"promote-plan":            "devdb plan promote",
+		"reconcile-plans":         "devdb plan reconcile",
+		"backfill-acceptance":     "devdb plan acceptance backfill",
+		"show-plan-item":          "devdb plan item show",
+		"list-missed-calls":       "devdb analytics missed",
+		"missed-calls-summary":    "devdb analytics summary",
+		"gc":                      "devdb archive gc",
+		"restore":                 "devdb archive restore",
+		"restore-list":            "devdb archive list",
+		"scan":                    "devdb inventory scan",
+		"context":                 "devdb inventory context",
+		"diff-since":              "devdb inventory diff",
+		"suggest-cuts":            "devdb inventory suggest-cuts",
+		"add-arch-note":           "devdb arch add",
+		"list-arch-notes":         "devdb arch list",
+		"verify-arch-note":        "devdb arch verify",
+		"arch-render":             "devdb arch render",
+		"review-start":            "devdb review start",
+		"review-add-finding":      "devdb review finding",
+		"review-finish":           "devdb review finish",
+		"review-list":             "devdb review list",
+		"review-resolve":          "devdb review resolve",
+		"review-report":           "devdb review report",
 		"record-verification-run": "devdb verify record",
-		"query-verification":    "devdb verify query",
-		"show-verification-run": "devdb verify show",
-		"dismiss-verification":  "devdb verify dismiss",
-		"register":              "devdb hub register",
-		"hub-sync":              "devdb hub sync",
-		"hub-dashboard":         "devdb hub dashboard",
-		"hub-project":           "devdb hub project",
-		"doctor-sync":           "devdb hub doctor",
-		"list-projects":         "devdb hub list",
-		"across":                "devdb hub across",
+		"query-verification":      "devdb verify query",
+		"show-verification-run":   "devdb verify show",
+		"dismiss-verification":    "devdb verify dismiss",
+		"register":                "devdb hub register",
+		"hub-sync":                "devdb hub sync",
+		"hub-dashboard":           "devdb hub dashboard",
+		"hub-project":             "devdb hub project",
+		"doctor-sync":             "devdb hub doctor",
+		"list-projects":           "devdb hub list",
+		"across":                  "devdb hub across",
 	}
 	if sug, ok := legacy[argv[0]]; ok {
 		return sug

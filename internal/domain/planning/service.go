@@ -78,6 +78,11 @@ type AddItemInput struct {
 	Body        string
 	MemoryRef   string
 	ModelID     string
+	// Phase/Step are optional labels persisted on the row (rendered as
+	// "[phase.step] title" in plan tree/list). Before 2026-11 the CLI
+	// accepted --phase but silently dropped it.
+	Phase string
+	Step  string
 }
 
 // AddItem creates a plan item under a plan/milestone.
@@ -92,9 +97,10 @@ func AddItem(db *sql.DB, in AddItemInput) (string, error) {
 	}
 	now := storage.NowUTC()
 	_, err = db.Exec(`
-		INSERT INTO plan_items(id, plan_id, milestone_id, item_number, title, body, memory_ref, status, created_at, model_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, 'planned', ?, ?)`,
-		id, nullStr(in.PlanID), nullStr(in.MilestoneID), ordinal, in.Title, nullStr(in.Body), nullStr(in.MemoryRef), now, in.ModelID,
+		INSERT INTO plan_items(id, plan_id, milestone_id, item_number, phase, step, title, body, memory_ref, status, created_at, model_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'planned', ?, ?)`,
+		id, nullStr(in.PlanID), nullStr(in.MilestoneID), ordinal, nullStr(in.Phase), nullStr(in.Step),
+		in.Title, nullStr(in.Body), nullStr(in.MemoryRef), now, in.ModelID,
 	)
 	return id, err
 }
@@ -481,8 +487,16 @@ func PlanTree(db *sql.DB, slugOrID string) ([]TreeNode, error) {
 		mNode := TreeNode{Kind: "milestone", ID: m.ID, Label: fmt.Sprintf("M%d %s", m.Number, m.Title), Status: m.Status}
 		items, _ := ListItems(db, ItemFilter{PlanID: p.ID, MilestoneID: m.ID, Limit: 100})
 		for _, it := range items {
+			label := it.Title
+			if it.Phase != "" {
+				if it.Step != "" {
+					label = fmt.Sprintf("[%s.%s] %s", it.Phase, it.Step, it.Title)
+				} else {
+					label = fmt.Sprintf("[%s] %s", it.Phase, it.Title)
+				}
+			}
 			mNode.Children = append(mNode.Children, TreeNode{
-				Kind: "item", ID: it.ID, Label: it.Title, Status: it.Status,
+				Kind: "item", ID: it.ID, Label: label, Status: it.Status,
 			})
 		}
 		root.Children = append(root.Children, mNode)

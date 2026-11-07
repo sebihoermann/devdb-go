@@ -308,9 +308,14 @@ func cmdHubProject(openCtx opener) *cobra.Command {
 
 func cmdHubDoctor(openCtx opener) *cobra.Command {
 	var project string
+	var scanRaw string
 	c := &cobra.Command{
 		Use:   "doctor",
 		Short: "Diagnose hub sync freshness and dirty source markers",
+		Long: "Diagnoses registered projects (freshness, hub status, sync errors). " +
+			"With --scan DIR[,DIR...] also walks those directories for .devdb/development.db " +
+			"repos missing from the registry — audit and dashboards only see registered repos, " +
+			"so an unregistered ledger is invisible debt. Fix: devdb hub register --auto --scope DIR.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := openCtx(cmd)
 			if err != nil {
@@ -321,7 +326,20 @@ func cmdHubDoctor(openCtx opener) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			var unregistered []hub.UnregisteredRepo
+			if scanRaw != "" {
+				unregistered, err = hub.FindUnregistered(splitCSV(scanRaw), flagRegistry)
+				if err != nil {
+					return err
+				}
+			}
 			if ctx.Out.JSON {
+				if scanRaw != "" {
+					return ctx.Out.PrintData(map[string]any{
+						"projects":     rows,
+						"unregistered": unregistered,
+					})
+				}
 				return ctx.Out.PrintData(rows)
 			}
 			var lines []string
@@ -338,10 +356,22 @@ func cmdHubDoctor(openCtx opener) *cobra.Command {
 			if len(lines) == 0 {
 				lines = []string{"no registered projects"}
 			}
+			if scanRaw != "" {
+				if len(unregistered) == 0 {
+					lines = append(lines, "scan: no unregistered .devdb repos found")
+				} else {
+					lines = append(lines, fmt.Sprintf("scan: %d unregistered .devdb repo(s) — invisible to hub audit/dashboard:", len(unregistered)))
+					for _, u := range unregistered {
+						lines = append(lines, fmt.Sprintf("  %s (alias would be: %s)", u.Root, u.SuggestedAlias))
+					}
+					lines = append(lines, "  fix: devdb hub register --auto --scope <dir>  (or hub register <path> --alias <name>)")
+				}
+			}
 			return ctx.Out.PrintData(output.HumanLines{Lines: lines})
 		},
 	}
 	c.Flags().StringVar(&project, "project", "", "filter to one alias or path")
+	c.Flags().StringVar(&scanRaw, "scan", "", "comma-separated directories to walk for unregistered .devdb repos")
 	return c
 }
 
@@ -413,7 +443,7 @@ func cmdHubAudit(openCtx opener) *cobra.Command {
 			if ctx.Out.JSON {
 				return ctx.Out.PrintData(report)
 			}
-			lines := formatAudit(report)
+			lines := formatAudit(report, effectiveListLimit(10))
 			return ctx.Out.PrintData(output.HumanLines{Lines: lines})
 		},
 	}
@@ -439,7 +469,7 @@ func splitCSV(s string) []string {
 	return out
 }
 
-func formatAudit(report hub.AuditReport) []string {
+func formatAudit(report hub.AuditReport, limit int) []string {
 	lines := []string{
 		fmt.Sprintf("# audit · %s · %s · threshold=%s",
 			report.CollectedAt, report.Mode, report.SeverityThreshold),
@@ -454,10 +484,47 @@ func formatAudit(report hub.AuditReport) []string {
 			lines = append(lines, "")
 			continue
 		}
-		for _, row := range sec.Rows {
-			lines = append(lines, "  "+formatAuditRow(kind, row))
-		}
+		lines = append(lines, formatAuditSection(kind, sec.Rows, limit)...)
 		lines = append(lines, "")
+	}
+	return lines
+}
+
+// formatAuditSection renders one audit section grouped per project with a
+// per-project row cap (limit <= 0 means uncapped, i.e. global --all). Before
+// this the 69-row 2026-10-31 fleet audit printed as one unstructured wall;
+// grouping keeps each project's debt block scannable and the cap keeps a
+// single noisy ledger from drowning the rest (feedback 143bcc9f).
+func formatAuditSection(kind string, rows []map[string]any, limit int) []string {
+	// Stable grouping: preserve first-appearance order of projects, keep the
+	// collector's row order within each project.
+	var order []string
+	byProject := map[string][]map[string]any{}
+	for _, row := range rows {
+		project, _ := row["project"].(string)
+		if project == "" {
+			project = "(unknown)"
+		}
+		if _, seen := byProject[project]; !seen {
+			order = append(order, project)
+		}
+		byProject[project] = append(byProject[project], row)
+	}
+
+	var lines []string
+	for _, project := range order {
+		group := byProject[project]
+		lines = append(lines, fmt.Sprintf("  %s (%d)", project, len(group)))
+		shown := group
+		if limit > 0 && len(group) > limit {
+			shown = group[:limit]
+		}
+		for _, row := range shown {
+			lines = append(lines, "    "+formatAuditRowBody(kind, row))
+		}
+		if len(shown) < len(group) {
+			lines = append(lines, fmt.Sprintf("    ...and %d more (rerun with --all to expand)", len(group)-len(shown)))
+		}
 	}
 	return lines
 }
@@ -485,8 +552,9 @@ func auditSectionTitle(kind string) string {
 	}
 }
 
-func formatAuditRow(kind string, row map[string]any) string {
-	project, _ := row["project"].(string)
+// formatAuditRowBody renders a row without the project prefix — the group
+// header already names the project.
+func formatAuditRowBody(kind string, row map[string]any) string {
 	switch kind {
 	case "high_feedback":
 		sev, _ := row["severity"].(string)
@@ -497,7 +565,7 @@ func formatAuditRow(kind string, row map[string]any) string {
 		if cat != "" {
 			catPart = " (" + cat + ")"
 		}
-		return fmt.Sprintf("%s  [%s]%s %s  [%s]", project, sev, catPart, note, prefix)
+		return fmt.Sprintf("[%s]%s %s  [%s]", sev, catPart, note, prefix)
 	case "high_findings":
 		sev, _ := row["severity"].(string)
 		title, _ := row["title"].(string)
@@ -507,36 +575,36 @@ func formatAuditRow(kind string, row map[string]any) string {
 		if file != "" {
 			filePart = " @ " + file
 		}
-		return fmt.Sprintf("%s  [%s] %s%s  [%s]", project, sev, title, filePart, prefix)
+		return fmt.Sprintf("[%s] %s%s  [%s]", sev, title, filePart, prefix)
 	case "stale_arch":
 		topic, _ := row["topic"].(string)
 		prefix, _ := row["id_prefix"].(string)
-		return fmt.Sprintf("%s · %s  [%s]", project, topic, prefix)
+		return fmt.Sprintf("%s  [%s]", topic, prefix)
 	case "overdue_reminders":
 		title, _ := row["title"].(string)
 		due, _ := row["due_at"].(string)
-		return fmt.Sprintf("%s  due=%s  %s", project, due, title)
+		return fmt.Sprintf("due=%s  %s", due, title)
 	case "in_progress":
 		title, _ := row["title"].(string)
 		prefix, _ := row["id_prefix"].(string)
-		return fmt.Sprintf("%s  %s  [%s]", project, title, prefix)
+		return fmt.Sprintf("%s  [%s]", title, prefix)
 	case "blocked":
 		title, _ := row["title"].(string)
 		note, _ := row["note"].(string)
 		prefix, _ := row["id_prefix"].(string)
-		return fmt.Sprintf("%s  %s — %s  [%s]", project, title, note, prefix)
+		return fmt.Sprintf("%s — %s  [%s]", title, note, prefix)
 	case "planned_per_project":
 		count := row["count"]
 		next, _ := row["next"].(string)
 		nextID, _ := row["next_id_prefix"].(string)
 		if next != "" {
-			return fmt.Sprintf("%s  N=%v  next=%q  [%s]", project, count, next, nextID)
+			return fmt.Sprintf("N=%v  next=%q  [%s]", count, next, nextID)
 		}
-		return fmt.Sprintf("%s  N=%v", project, count)
+		return fmt.Sprintf("N=%v", count)
 	case "stale_verification":
 		cmd, _ := row["command"].(string)
 		reason, _ := row["reason"].(string)
-		return fmt.Sprintf("%s  %s  (%s)", project, cmd, reason)
+		return fmt.Sprintf("%s  (%s)", cmd, reason)
 	}
-	return fmt.Sprintf("%s  %v", project, row)
+	return fmt.Sprintf("%v", row)
 }

@@ -1,0 +1,12 @@
+[
+  {
+    "id": "fdb41483f94e55f172c1ab4954a08f41",
+    "role": "model",
+    "category": "dogfood",
+    "severity": "high",
+    "note": "`devdb plan milestone list --plan <slug>` (and `plan item list`) return `[]` even when the slug is valid; the `--plan` flag on LIST verbs accepts only the plan UUID, not the slug, duplicating the closed M1.2 gap (`b148e8e7`) that fixed the ADD verbs but missed the LIST siblings. Proposed fix: apply the same slug→id resolution path used in milestone/item `add` to their `list` siblings, and fail closed on `--plan <unknown>` instead of silently returning `[]`.",
+    "context": "bootstrap-session-2026-09-22",
+    "status": "open",
+    "created_at": "2026-09-22T21:13:57.164404365Z"
+  }
+]

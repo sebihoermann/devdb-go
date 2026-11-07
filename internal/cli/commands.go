@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/sebihoermann/devdb-go/internal/app"
 	"github.com/sebihoermann/devdb-go/internal/domain/analytics"
@@ -401,6 +402,32 @@ func cmdDoctor(open opener) *cobra.Command {
 		result["schema_kind"] = kind
 		result["schema_version"] = ver
 		result["db_status"] = "ok"
+		// Lock probe: fast write-lock check + name any process holding it.
+		// Closes plan item M5.1 (hermes-devdb-health): agents hitting a
+		// persistent SQLITE_BUSY should learn WHICH process to wait for.
+		if err := storage.ProbeWriteLock(ctx.Project.DBPath, 500*time.Millisecond); err != nil {
+			result["write_lock"] = "contended"
+			result["write_lock_error"] = err.Error()
+			if holders := storage.LockHolders(ctx.Project.DBPath); len(holders) > 0 {
+				result["lock_holders"] = holders
+			}
+			if ctx.Out.JSON {
+				return ctx.Out.PrintData(result)
+			}
+			lines := []string{
+				"doctor: db present but WRITE LOCK CONTENDED",
+				fmt.Sprintf("probe error: %v", err),
+			}
+			if holders := storage.LockHolders(ctx.Project.DBPath); len(holders) > 0 {
+				for _, h := range holders {
+					lines = append(lines, fmt.Sprintf("held by pid %d (%s) via %s", h.PID, h.Cmdline, h.File))
+				}
+			} else {
+				lines = append(lines, "no /proc holder found — lock may be stale; check for crashed processes")
+			}
+			return ctx.Out.PrintData(output.HumanLines{Lines: lines})
+		}
+		result["write_lock"] = "free"
 		if ctx.Out.JSON {
 			return ctx.Out.PrintData(result)
 		}
@@ -408,6 +435,7 @@ func cmdDoctor(open opener) *cobra.Command {
 			"doctor: ok",
 			fmt.Sprintf("schema: %s v%d", kind, ver),
 			fmt.Sprintf("db: %s", ctx.Project.DBPath),
+			"write lock: free",
 			"hygiene: devdb doctor hygiene",
 		}})
 	}
@@ -426,8 +454,45 @@ func argvFlag(name string) string {
 func cmdFeedback(open opener) *cobra.Command {
 	feedbackCmd := &cobra.Command{Use: "feedback", Short: "Feedback and observations"}
 	feedbackCmd.AddCommand(cmdFeedbackAdd(open), cmdFeedbackList(open), cmdFeedbackShow(open),
-		cmdFeedbackClose(open), cmdFeedbackAnnotate(open), cmdFeedbackImport(open))
+		cmdFeedbackClose(open), cmdFeedbackAnnotate(open), cmdFeedbackSeverity(open), cmdFeedbackImport(open))
 	return feedbackCmd
+}
+
+func cmdFeedbackSeverity(open opener) *cobra.Command {
+	var reason string
+	c := &cobra.Command{
+		Use:   "severity ID LEVEL",
+		Short: "Re-seed a feedback row's severity (records are not debt)",
+		Long: "Sets a feedback row's severity to LEVEL (info|low|med|high|critical) and appends an " +
+			"auditable '[severity <ts>] old -> new: reason' stamp to the row's context. Use when a " +
+			"high/critical row turns out to be an evidence or state record rather than actionable " +
+			"defect — the severity contract reserves high/critical for rows where an artifact must " +
+			"still change.",
+		Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx, err := open(cmd)
+			if err != nil {
+				return err
+			}
+			defer ctx.Close()
+			if err := ctx.RequireDB(); err != nil {
+				return err
+			}
+			if err := validateEnum("severity", args[1], []string{"info", "low", "med", "medium", "high", "critical"}); err != nil {
+				return err
+			}
+			id, old, err := feedback.SetSeverity(ctx.DB, args[0], args[1], reason, ctx.ModelID)
+			if err != nil {
+				return err
+			}
+			ctx.Out.Hint("severity: %s -> %s", old, args[1])
+			return ctx.Out.WriteResult(id, map[string]any{
+				"kind": "feedback", "action": "severity", "old": old, "new": args[1],
+			})
+		},
+	}
+	c.Flags().StringVar(&reason, "reason", "", "why the severity changed (recorded in context)")
+	return c
 }
 
 func cmdFeedbackAdd(open opener) *cobra.Command {
@@ -546,7 +611,7 @@ func cmdPlan(open opener) *cobra.Command {
 	plan := &cobra.Command{Use: "plan", Short: "Structured planning"}
 	plan.AddCommand(
 		cmdPlanCreate(open), cmdPlanList(open), cmdPlanShow(open), cmdPlanTree(open), cmdPlanStatus(open),
-		cmdPlanScaffold(open), cmdPlanPromote(open), cmdPlanReconcile(open),
+		cmdPlanScaffold(open), cmdPlanPromote(open), cmdPlanReconcile(open), cmdPlanDelete(open),
 	)
 	ms := &cobra.Command{Use: "milestone", Short: "Plan milestones"}
 	ms.AddCommand(cmdPlanMilestoneAdd(open), cmdPlanMilestoneList(open), cmdPlanMilestoneStatus(open))
@@ -646,6 +711,7 @@ func cmdPlanItemAdd(open opener) *cobra.Command {
 				id, err = planning.AddItem(ctx.DB, planning.AddItemInput{
 					PlanID: planID, MilestoneID: milestoneID,
 					Title: title, Body: body, MemoryRef: memoryRef, ModelID: ctx.ModelID,
+					Phase: phase, Step: step,
 				})
 			}
 			if err != nil {
@@ -658,9 +724,9 @@ func cmdPlanItemAdd(open opener) *cobra.Command {
 	c.Flags().StringVar(&milestoneID, "milestone", "", "milestone id")
 	c.Flags().StringVar(&body, "body", "", "item body")
 	c.Flags().StringVar(&memoryRef, "memory-ref", "", "optional memory anchor such as MEMORY.md#section or memory/YYYY-MM-DD.md")
-	c.Flags().BoolVar(&legacy, "legacy", false, "create legacy flat item (phase/step)")
-	c.Flags().StringVar(&phase, "phase", "", "legacy phase label")
-	c.Flags().StringVar(&step, "step", "", "legacy step label")
+	c.Flags().BoolVar(&legacy, "legacy", false, "create legacy flat item (no plan/milestone)")
+	c.Flags().StringVar(&phase, "phase", "", "optional phase label; rendered as \"[phase] title\" in plan tree")
+	c.Flags().StringVar(&step, "step", "", "optional step label within the phase; renders as \"[phase.step] title\"")
 	return c
 }
 

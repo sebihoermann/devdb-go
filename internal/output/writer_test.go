@@ -138,6 +138,23 @@ type feedbackShape struct {
 	ID string `json:"id"`
 }
 
+// TestPrintDataHumanEmptySlicePrintsEmptyArray covers the default
+// (non---json) output path: an empty list must print "[]", never "null" —
+// same contract as the --json path, so an empty result and a filter that
+// matched nothing are distinguishable. Regression for dogfood finding
+// 9fa4900a983dafb402ae5ea45b7e3122.
+func TestPrintDataHumanEmptySlicePrintsEmptyArray(t *testing.T) {
+	var out bytes.Buffer
+	w := &Writer{JSON: false, Stdout: &out}
+	var rows []map[string]any
+	if err := w.PrintData(rows); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(out.String()); got != "[]" {
+		t.Fatalf("stdout = %q, want []", got)
+	}
+}
+
 // TestStableJSONValuePassThrough covers the non-slice paths so the helper
 // does not accidentally rewrite scalars, maps, or structs.
 func TestStableJSONValuePassThrough(t *testing.T) {

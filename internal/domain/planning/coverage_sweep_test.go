@@ -16,7 +16,7 @@ func TestScaffoldAbsoluteOutputAndDesignPromote(t *testing.T) {
 	absOut := filepath.Join(repo, "custom", "plan.html")
 	res, err := ScaffoldPlan(db, ScaffoldPlanInput{
 		Title: "Design Plan", Slug: "design-abs", Mode: "design", MilestoneCount: 1,
-		OutputPath: absOut, RepoRoot: repo, ModelID: "test",
+		OutputPath: absOut, RepoRoot: repo, ModelID: "test", WithImplementItems: true,
 	})
 	if err != nil {
 		t.Fatal(err)

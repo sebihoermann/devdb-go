@@ -10,13 +10,13 @@ import (
 
 func TestDetectIntentAllBranches(t *testing.T) {
 	cases := map[string]string{
-		"":           "other",
-		"feat: add x": "feat",
-		"fix: bug":    "fix",
-		"add widget":  "feat",
-		"bug in auth": "fix",
-		"error path":  "fix",
-		"custom: x":   "custom",
+		"":             "other",
+		"feat: add x":  "feat",
+		"fix: bug":     "fix",
+		"add widget":   "feat",
+		"bug in auth":  "fix",
+		"error path":   "fix",
+		"custom: x":    "custom",
 		"docs: readme": "docs",
 	}
 	for in, want := range cases {

@@ -77,6 +77,21 @@ func SetStatus(db *sql.DB, idPrefix, status, modelID string) (string, error) {
 	return id, err
 }
 
+// Delete removes a goal row permanently. The goals table has no children
+// (no FK references it), so this is a single DELETE — but it goes through
+// the CLI rather than hand-written SQL so the id resolves via prefix like
+// every other verb and the action is logged in analytics.
+func Delete(db *sql.DB, idPrefix string) (string, error) {
+	id, err := resolveID(db, idPrefix)
+	if err != nil {
+		return "", err
+	}
+	if _, err := db.Exec(`DELETE FROM goals WHERE id=?`, id); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
 func resolveID(db *sql.DB, prefix string) (string, error) {
 	rows, err := db.Query(`SELECT id FROM goals`)
 	if err != nil {

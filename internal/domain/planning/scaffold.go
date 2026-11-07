@@ -67,6 +67,11 @@ type ScaffoldPlanInput struct {
 	RepoRoot       string
 	SkipAcceptance bool
 	ModelID        string
+	// WithImplementItems opts into one auto "<Verb> Milestone N" item per
+	// milestone (the legacy scaffold shape). Default off: the meta-items
+	// have no binary acceptance state, cannot be closed through the normal
+	// path, and inflate plan counts (skill pitfalls 15/19).
+	WithImplementItems bool
 }
 
 // ScaffoldPlanResult summarizes a scaffold run.
@@ -134,16 +139,22 @@ func ScaffoldPlan(db *sql.DB, in ScaffoldPlanInput) (ScaffoldPlanResult, error) 
 
 	var milestoneLines []string
 	for n := 1; n <= count; n++ {
-		title := fmt.Sprintf("M%d. Milestone %d", n, n)
-		milestoneLines = append(milestoneLines, fmt.Sprintf("    <li>%s</li>", title))
+		// No "M<n>. " prefix in the title: `plan show`/`plan tree` already
+		// render the milestone number, so a prefixed title displays as
+		// "M1 M1. Milestone 1" (skill Convention 1).
+		title := fmt.Sprintf("Milestone %d", n)
+		milestoneLines = append(milestoneLines, fmt.Sprintf("    <li>M%d. %s</li>", n, title))
 		msID, err := AddMilestone(db, planID, title, fmt.Sprintf("Work track %d for %s", n, in.Title), in.ModelID, n)
 		if err != nil {
 			return ScaffoldPlanResult{}, err
 		}
+		if !in.WithImplementItems {
+			continue
+		}
 		itemID, err := AddStructuredItem(db, StructuredItemInput{
 			PlanID: planID, MilestoneID: msID,
-			Title: fmt.Sprintf("%s %s", itemVerb, title),
-			Body:  fmt.Sprintf("Cover milestone %d. Link artifact: %s", n, relArtifact),
+			Title:     fmt.Sprintf("%s %s", itemVerb, title),
+			Body:      fmt.Sprintf("Cover milestone %d. Link artifact: %s", n, relArtifact),
 			SourceDoc: relArtifact, ModelID: in.ModelID,
 		})
 		if err != nil {

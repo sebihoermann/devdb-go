@@ -92,7 +92,7 @@ func TestScanRollsBackOnChangeEventsFailure(t *testing.T) {
 
 	for _, table := range []string{"repo_files", "scan_runs", "file_change_events"} {
 		var n int
-		if err := db.QueryRow(`SELECT COUNT(*) FROM `+table).Scan(&n); err != nil {
+		if err := db.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&n); err != nil {
 			t.Fatal(err)
 		}
 		if n != 0 {
@@ -126,7 +126,7 @@ func TestScanHappyPathStillRecords(t *testing.T) {
 	}
 	for _, table := range []string{"repo_files", "scan_runs", "file_change_events"} {
 		var n int
-		if err := db.QueryRow(`SELECT COUNT(*) FROM `+table).Scan(&n); err != nil {
+		if err := db.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&n); err != nil {
 			t.Fatal(err)
 		}
 		if n == 0 {

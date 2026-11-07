@@ -296,9 +296,9 @@ func TestListBogusFilterReturnsExplicitError(t *testing.T) {
 	runCLIOut(t, "--db", dbPath, "init")
 
 	cases := []struct {
-		name      string
-		args      []string
-		mustHave  []string // substrings that must appear in stderr
+		name     string
+		args     []string
+		mustHave []string // substrings that must appear in stderr
 	}{
 		{
 			name:     "feedback list --status bogus",

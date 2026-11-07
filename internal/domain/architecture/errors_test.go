@@ -78,12 +78,12 @@ func TestInvalidTopicErrorIsActionable(t *testing.T) {
 		}
 		msg := err.Error()
 		for _, fragment := range []string{
-			natural,                       // echoes the bad input
-			"kebab-case",                  // grammar
-			"3-40",                        // grammar (length range)
-			"lowercase",                   // grammar (charset)
-			"example:",                    // actionable example follows
-			"ssh-log-analyzer",            // concrete example
+			natural,            // echoes the bad input
+			"kebab-case",       // grammar
+			"3-40",             // grammar (length range)
+			"lowercase",        // grammar (charset)
+			"example:",         // actionable example follows
+			"ssh-log-analyzer", // concrete example
 		} {
 			if !strings.Contains(msg, fragment) {
 				t.Errorf("error message missing %q\nfull message:\n%s", fragment, msg)

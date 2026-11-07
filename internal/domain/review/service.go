@@ -45,42 +45,42 @@ var ErrCapExceeded = errors.New("finding cap exceeded")
 
 // Run is a code review run row.
 type Run struct {
-	ID             string   `json:"id"`
-	ScopePaths     []string `json:"scope_paths"`
-	Tier           string   `json:"tier"`
-	StartedAt      string   `json:"started_at"`
-	FinishedAt     string   `json:"finished_at,omitempty"`
-	GitSHA         string   `json:"git_sha,omitempty"`
-	FilesTotal     *int     `json:"files_total,omitempty"`
-	FilesReviewed  *int     `json:"files_reviewed,omitempty"`
-	Summary        string   `json:"summary,omitempty"`
-	ModelID        string   `json:"model_id"`
+	ID            string   `json:"id"`
+	ScopePaths    []string `json:"scope_paths"`
+	Tier          string   `json:"tier"`
+	StartedAt     string   `json:"started_at"`
+	FinishedAt    string   `json:"finished_at,omitempty"`
+	GitSHA        string   `json:"git_sha,omitempty"`
+	FilesTotal    *int     `json:"files_total,omitempty"`
+	FilesReviewed *int     `json:"files_reviewed,omitempty"`
+	Summary       string   `json:"summary,omitempty"`
+	ModelID       string   `json:"model_id"`
 }
 
 // Finding is a review finding row.
 type Finding struct {
-	ID               string   `json:"id"`
-	RunID            string   `json:"run_id"`
-	FilePath         string   `json:"file_path,omitempty"`
-	LineStart        *int     `json:"line_start,omitempty"`
-	LineEnd          *int     `json:"line_end,omitempty"`
-	Principle        string   `json:"principle"`
-	Title            string   `json:"title"`
-	Recommendation   string   `json:"recommendation"`
-	Severity         string   `json:"severity"`
-	Confidence       string   `json:"confidence"`
-	Effort           string   `json:"effort"`
-	Status           string   `json:"status"`
-	ResolvedInCommit string   `json:"resolved_in_commit,omitempty"`
-	SourceHash       string   `json:"source_hash,omitempty"`
-	CreatedAt        string   `json:"created_at"`
-	ModelID          string   `json:"model_id"`
-	Priority         float64  `json:"priority,omitempty"`
+	ID               string  `json:"id"`
+	RunID            string  `json:"run_id"`
+	FilePath         string  `json:"file_path,omitempty"`
+	LineStart        *int    `json:"line_start,omitempty"`
+	LineEnd          *int    `json:"line_end,omitempty"`
+	Principle        string  `json:"principle"`
+	Title            string  `json:"title"`
+	Recommendation   string  `json:"recommendation"`
+	Severity         string  `json:"severity"`
+	Confidence       string  `json:"confidence"`
+	Effort           string  `json:"effort"`
+	Status           string  `json:"status"`
+	ResolvedInCommit string  `json:"resolved_in_commit,omitempty"`
+	SourceHash       string  `json:"source_hash,omitempty"`
+	CreatedAt        string  `json:"created_at"`
+	ModelID          string  `json:"model_id"`
+	Priority         float64 `json:"priority,omitempty"`
 }
 
 // ImportResult is the outcome of a batch finding import.
 type ImportResult struct {
-	Imported   []string         `json:"imported"`
+	Imported   []string            `json:"imported"`
 	SkippedCap []map[string]string `json:"skipped_cap"`
 	Errors     []map[string]string `json:"errors"`
 }

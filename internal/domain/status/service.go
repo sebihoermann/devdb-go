@@ -10,17 +10,17 @@ import (
 
 // Snapshot is compact delivery state.
 type Snapshot struct {
-	Overall       string         `json:"overall"`
+	Overall       string             `json:"overall"`
 	InFlight      *planning.PlanItem `json:"in_flight,omitempty"`
-	OpenItems     int            `json:"open_plan_items"`
-	InProgress    int            `json:"in_progress_plan_items"`
-	OpenFeedback  int            `json:"open_feedback"`
-	GitBranch     string         `json:"git_branch,omitempty"`
-	GitDirty      bool           `json:"git_dirty"`
-	GitAhead      int            `json:"git_ahead"`
-	GitBehind     int            `json:"git_behind"`
-	SchemaKind    string         `json:"schema_kind"`
-	SchemaVersion int            `json:"schema_version"`
+	OpenItems     int                `json:"open_plan_items"`
+	InProgress    int                `json:"in_progress_plan_items"`
+	OpenFeedback  int                `json:"open_feedback"`
+	GitBranch     string             `json:"git_branch,omitempty"`
+	GitDirty      bool               `json:"git_dirty"`
+	GitAhead      int                `json:"git_ahead"`
+	GitBehind     int                `json:"git_behind"`
+	SchemaKind    string             `json:"schema_kind"`
+	SchemaVersion int                `json:"schema_version"`
 }
 
 // Build assembles a status snapshot.

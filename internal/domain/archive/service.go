@@ -758,6 +758,12 @@ func restoreLocSnapshot(db *sql.DB, payload map[string]any) (int, error) {
 type GCOptions struct {
 	OlderThanDays int
 	DryRun        bool
+	// KeepSeverities lists feedback severities that gc must never close,
+	// regardless of age. Defaults to {high, critical} when nil — stale
+	// high-severity rows are live debt, not silt. Pass an empty non-nil
+	// slice (via CLI --keep-severity "") for the legacy close-everything
+	// behavior.
+	KeepSeverities []string
 }
 
 // GCResult summarizes gc dry-run or execution.
@@ -772,6 +778,12 @@ type GCResult struct {
 	FindingsResolved   int `json:"findings_resolved,omitempty"`
 	RemindersArchived  int `json:"reminders_archived,omitempty"`
 	TasksArchived      int `json:"tasks_archived,omitempty"`
+	// FeedbackProtected counts stale open rows skipped because their
+	// severity is in KeepSeverities (default high+critical).
+	FeedbackProtected int `json:"feedback_protected,omitempty"`
+	// FeedbackIDs lists the rows that would be / were closed (dry-run
+	// transparency: agents can audit exactly what gc touches).
+	FeedbackIDs []string `json:"feedback_ids,omitempty"`
 }
 
 // GC prunes stale open feedback, missing-file findings, and old dismissed reminders/tasks.
@@ -783,23 +795,43 @@ func GC(db *sql.DB, opt GCOptions) (GCResult, error) {
 
 	res := GCResult{OlderThanDays: opt.OlderThanDays}
 
+	keep := opt.KeepSeverities
+	if keep == nil {
+		keep = []string{"high", "critical"}
+	}
+	keepSet := map[string]bool{}
+	for _, s := range keep {
+		s = strings.ToLower(strings.TrimSpace(s))
+		if s == "medium" {
+			s = "med"
+		}
+		if s != "" {
+			keepSet[s] = true
+		}
+	}
+
 	fbRows, err := db.Query(
-		`SELECT id FROM feedback WHERE status='open' AND created_at < ? ORDER BY created_at`, cutoff,
+		`SELECT id, COALESCE(severity,'') FROM feedback WHERE status='open' AND created_at < ? ORDER BY created_at`, cutoff,
 	)
 	if err != nil {
 		return res, err
 	}
 	var fbIDs []string
 	for fbRows.Next() {
-		var id string
-		if err := fbRows.Scan(&id); err != nil {
+		var id, sev string
+		if err := fbRows.Scan(&id, &sev); err != nil {
 			fbRows.Close()
 			return res, err
+		}
+		if keepSet[sev] {
+			res.FeedbackProtected++
+			continue
 		}
 		fbIDs = append(fbIDs, id)
 	}
 	fbRows.Close()
 	res.FeedbackToClose = len(fbIDs)
+	res.FeedbackIDs = fbIDs
 
 	repoFiles := map[string]bool{}
 	rfRows, err := db.Query(`SELECT path FROM repo_files`)

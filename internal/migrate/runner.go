@@ -160,7 +160,7 @@ func execStatements(tx *sql.Tx, script string) error {
 }
 
 // splitStatements breaks a SQL script into individual statements on `;` while
-// honoring SQL lexical rules: single-quoted string literals (with `''` as the
+// honoring SQL lexical rules: single-quoted string literals (with `”` as the
 // SQL-standard escape), double-quoted identifiers (with `""` as the escape),
 // and `--` line comments. Tokens inside any of those constructs never split.
 // Block comments /* ... */ are tolerated inside one statement (their `;` and

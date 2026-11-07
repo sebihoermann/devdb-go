@@ -19,7 +19,7 @@ var (
 	agentDocNames = map[string]bool{
 		"agents.md": true, "claude.md": true, "agent.md": true, "copilot-instructions.md": true,
 	}
-	docExtensions = map[string]bool{".md": true, ".rst": true, ".txt": true}
+	docExtensions    = map[string]bool{".md": true, ".rst": true, ".txt": true}
 	configExtensions = map[string]bool{
 		".toml": true, ".json": true, ".yaml": true, ".yml": true,
 		".ini": true, ".cfg": true, ".env": true, ".lock": true,

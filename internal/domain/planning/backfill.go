@@ -33,7 +33,7 @@ func BackfillAcceptanceFromSpec(db *sql.DB, milestone, specPath, modelID string)
 	if nextMatch != nil {
 		sectionEnd = nextMatch[0]
 	}
-	section := specText[match[0]:match[1]+sectionEnd]
+	section := specText[match[0] : match[1]+sectionEnd]
 
 	acceptancePattern := regexp.MustCompile(`(?m)^- \[[xX ]\] (.+)$`)
 	acceptances := acceptancePattern.FindAllStringSubmatch(section, -1)

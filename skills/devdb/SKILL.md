@@ -61,7 +61,7 @@ devdb hub dashboard --view quality
 devdb hub dashboard --view work
 devdb hub dashboard --attention-only
 devdb hub project <alias>
-devdb hub doctor --json
+devdb hub doctor --json              # add --scan DIR[,DIR...] to also flag unregistered .devdb repos
 ```
 
 Register a repo once with `devdb hub register <path> --alias <name>` — that updates both `~/.devdb-projects` and the hub. `devdb hub list` reads from the hub when `metadata.db` exists.
@@ -114,9 +114,11 @@ The skill is wasted if the ledger does not grow with the work.
 
 ## Hygiene rule
 
-A ledger nobody prunes becomes silt. Run `devdb archive gc --dry-run` at the start of any session whose `devdb report` shows a populated stale section. If the dry-run summary matches your expectations, run `devdb archive gc --yes` to archive feedback older than 30 days that's still open, and to resolve review findings on files no longer present in `repo_files`. Adjust the threshold with `--older-than DAYS` when needed.
+A ledger nobody prunes becomes silt. Run `devdb archive gc --dry-run` at the start of any session whose `devdb report` shows a populated stale section. If the dry-run summary matches your expectations, run `devdb archive gc` (no confirmation flag — unlike `archive run`, gc has no `--yes`; it writes directly, `--dry-run` is the preview) to archive feedback older than 30 days that's still open, and to resolve review findings on files no longer present in `repo_files`. Adjust the threshold with `--older-than DAYS` when needed.
 
 Archiving is reversible (`UPDATE feedback SET status='open' WHERE id=?`), so bias toward archiving aggressively.
+
+**gc has a severity floor.** Since commit 0927590 it never closes rows at or above `--keep-severity` (default `high,critical`) — stale high-severity rows are live debt, not silt. `--keep-severity ""` restores the legacy close-everything behavior; `--dry-run` lists the exact row ids it would close plus the protected count. Before the floor existed (pre-2026-11), a gc pass closed *every* stale open row regardless of severity — a fleet pass on 2026-10-31 closed 332 rows and 38 deliberately-open research-dashboard rows survived only via a caller-side snapshot/restore. If you ever run gc on an old binary, or with `--keep-severity ""`, keep that protection recipe: snapshot (`SELECT id, status, proposed_fix ... WHERE id IN (...)`), gc, restore (`UPDATE feedback SET status='open', proposed_fix=? WHERE id=?`). Also prefer fixing classification debt (close what is fixed, re-seed records to info) *before* a first gc so the generic "closed by gc" stamp does not overwrite rows that deserved a real `--proposed-fix`.
 
 ### Heavy hygiene: `archive run` and `archive restore`
 
@@ -259,8 +261,10 @@ Hold these in mind so scripted use does not break:
 - **Metadata hub.** `--metadata-db` and `DEVDB_METADATA_DB` override `~/.devdb/metadata.db`. `--no-metadata-push` and `DEVDB_DISABLE_METADATA_PUSH=1` skip opportunistic hub refresh after writes.
 - **Severity aliases.** `med` and `medium` are interchangeable; `info|low|med|medium|high|critical` are accepted and normalized.
 - **Severity scale.** `info` = note for completeness. `low` = clean up if nearby. `med` = real defect. `high` = correctness, security, or DX block. `critical` = production / data-loss class.
+- **Severity measures debt, not importance.** `high`/`critical` mean "actionable defect that should block or be fixed"; a row whose fix has shipped or whose content is a *record* does not belong there. Three row classes are commonly mislabeled high: (1) **evidence records** — a milestone outcome, thesis revision, or model summary worth remembering (use `info`, category `evidence`); (2) **state records** — periodic cron/watchdog status snapshots like an ALERT reading (use `info`, put the alert level in the note or category, not in severity); (3) **verified-correct fact-check rows** — an audit that *confirmed* the claim (close the row; it is not debt). Reserve `high`/`critical` for rows where someone must still change an artifact. Symptom of drift: `hub audit` high-severity sections fill with records, and real defects stop being visible. Sweep rule: when `hub audit` shows a high/critical row that needs no artifact change, re-seed it with `devdb feedback severity <id> info --reason "..."` (stamps the old->new change plus reason into the row's context automatically).
 - **Category convention (`feedback add --category`).** Reach for: `correctness`, `convention`, `dx`, `docs`, `test-coverage`, `sprawl`, `dogfood`, `audit`, `skill`. Single word, kebab-case.
 - **Plan-item statuses.** `planned` → `in_progress` (set by `plan item start`) → `done` (close via `plan item close` or status after acceptance). Use `wontfix` for explicit cancel.
+- **Plan/goal deletion.** `plan delete <slug-or-id>` cascades the whole subtree in one FK-safe transaction; it refuses plans with in_progress items unless `--force` and previews counts with `--dry-run`. `goal delete <id>` removes the row. Prefer these verbs over hand-written SQL cascades (wrong delete order raises FOREIGN KEY constraint failed).
 
 ## Playbook 1: Log feedback
 
@@ -270,6 +274,7 @@ devdb feedback add "..." --role user --severity ... --category ...
 devdb feedback add "..." --role codebase --severity ... --category ...
 devdb feedback close <id> --proposed-fix "..."
 devdb feedback annotate <id> --note "..."
+devdb feedback severity <id> <info|low|med|high|critical> --reason "..."   # re-seed a mislabeled row; stamps old->new into context
 devdb feedback import markdown path/to/archive.md
 devdb feedback import commits --branch feature/foo
 ```
@@ -426,7 +431,7 @@ devdb hub sync [--strict] [--json]
 devdb hub sync --watch --interval 60
 devdb hub dashboard [--view summary|work|delivery|quality] [--attention-only] [--json]
 devdb hub project <alias_or_path> [--json]
-devdb hub doctor [--json]
+devdb hub doctor [--json] [--scan DIR[,DIR...]]
 devdb hub across similar-feedback --keyword "import error"
 devdb hub across open-debt
 devdb hub audit [--severity <level>] [--kind <list>] [--project <alias>] [--cached] 
@@ -437,9 +442,11 @@ federation read by default (parity with `hub across`), `--cached` for
 hub-snapshot parity. Eight sections: high feedback, high review
 findings, stale arch notes, overdue reminders, in-progress plan items,
 blocked, planned per project, stale verification. Replaces 30+ manual
-commands.
+commands. Human output groups rows per project (group header carries the full count) and caps each group at 10 rows with an `...and K more` line; the global `--all` expands to uncapped. JSON output is always complete.
 
 Federation queries (`hub across`) attach each project's `development.db` directly — they do not read copied hub rows.
+
+`hub doctor --scan DIR[,DIR...]` walks the given directories for `.devdb/development.db` repos missing from the registry and prints the fix command (`hub register --auto --scope DIR`). Run it after cloning new repos or when `hub audit` looks suspiciously empty — unregistered ledgers are invisible debt (2026-10-31: 15 of 19 fleet repos were unregistered and silent in every hub view). Without `--scan` the output shape is unchanged.
 
 ## Other useful reads
 
@@ -454,9 +461,9 @@ Federation queries (`hub across`) attach each project's `development.db` directl
 
 **Initialization:** `init`, `import python-db`
 
-**Planning:** `plan create|list|show|tree|status|scaffold|promote|reconcile` · `plan milestone add|list|status` · `plan item add|list|show|start|pause|close|status` · `plan acceptance add|meet|backfill` (run `meet` calls sequentially, not in parallel — see Closure ritual) · `plan file add`
+**Planning:** `plan create|list|show|tree|status|scaffold|promote|reconcile|delete` · `plan milestone add|list|status` · `plan item add|list|show|start|pause|close|status` · `plan acceptance add|meet|backfill` (run `meet` calls sequentially, not in parallel — see Closure ritual) · `plan file add`
 
-**Memory:** `feedback add|list|show|close|annotate|import` · `goal add|list|set` · `feature add|list`
+**Memory:** `feedback add|list|show|close|annotate|severity|import` · `goal add|list|set|delete` · `feature add|list`
 
 **Architecture:** `arch add|list|show|update|verify|render`
 
@@ -472,7 +479,7 @@ Federation queries (`hub across`) attach each project's `development.db` directl
 
 **Hygiene / analytics:** `archive run|list|restore|gc` · `analytics missed|summary` · `ledger housekeeping` (bundled archive + reconcile + scan + optional verify)
 
-**Reads:** `status`, `quality`, `report`, `resume`, `doctor`, `help`, `list`, `show`
+**Reads:** `status`, `quality`, `report`, `resume`, `doctor`, `help`, `list`, `show` · `plan status <slug-or-id>` is scoped per plan since 9347a13 (no-arg or `--global` = fleet aggregate; unknown ref exits non-zero)
 
 Global flags: `--repo` (alias: `--repo-root`), `--db`, `--json`, `--all`, `--verbose`, `--metadata-db`, `--no-metadata-push`.
 

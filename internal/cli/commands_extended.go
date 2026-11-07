@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -18,7 +19,7 @@ import (
 
 func cmdGoal(open opener) *cobra.Command {
 	goal := &cobra.Command{Use: "goal", Short: "Project goals"}
-	goal.AddCommand(cmdGoalAdd(open), cmdGoalList(open), cmdGoalSet(open))
+	goal.AddCommand(cmdGoalAdd(open), cmdGoalList(open), cmdGoalSet(open), cmdGoalDelete(open))
 	return goal
 }
 
@@ -99,6 +100,31 @@ func cmdGoalSet(open opener) *cobra.Command {
 				return err
 			}
 			return ctx.Out.WriteResult(id, map[string]any{"kind": "goal", "action": "set"})
+		},
+	}
+}
+
+func cmdGoalDelete(open opener) *cobra.Command {
+	return &cobra.Command{
+		Use:   "delete ID",
+		Short: "Permanently remove a goal row",
+		Long: "Deletes the goal outright (the goals table has no children). For " +
+			"soft-closing finished work prefer `goal set ID done`.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx, err := open(cmd)
+			if err != nil {
+				return err
+			}
+			defer ctx.Close()
+			if err := ctx.RequireDB(); err != nil {
+				return err
+			}
+			id, err := goals.Delete(ctx.DB, args[0])
+			if err != nil {
+				return err
+			}
+			return ctx.Out.WriteResult(id, map[string]any{"kind": "goal", "action": "delete"})
 		},
 	}
 }
@@ -354,8 +380,8 @@ func cmdApprovalRequest(open opener) *cobra.Command {
 func cmdApprovalApprove(open opener) *cobra.Command {
 	var table, note string
 	c := &cobra.Command{
-		Use:   "approve ENTITY_ID",
-		Args:  cobra.ExactArgs(1),
+		Use:  "approve ENTITY_ID",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -383,8 +409,8 @@ func cmdApprovalApprove(open opener) *cobra.Command {
 func cmdApprovalReject(open opener) *cobra.Command {
 	var table, note string
 	c := &cobra.Command{
-		Use:   "reject ENTITY_ID",
-		Args:  cobra.ExactArgs(1),
+		Use:  "reject ENTITY_ID",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -412,8 +438,8 @@ func cmdApprovalReject(open opener) *cobra.Command {
 func cmdApprovalWithdraw(open opener) *cobra.Command {
 	var table, note string
 	c := &cobra.Command{
-		Use:   "withdraw ENTITY_ID",
-		Args:  cobra.ExactArgs(1),
+		Use:  "withdraw ENTITY_ID",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -492,8 +518,8 @@ func cmdReminder(open opener) *cobra.Command {
 func cmdReminderAdd(open opener) *cobra.Command {
 	var body, due, file, planItem string
 	c := &cobra.Command{
-		Use:   "add TITLE",
-		Args:  cobra.MinimumNArgs(1),
+		Use:  "add TITLE",
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -524,7 +550,7 @@ func cmdReminderList(open opener) *cobra.Command {
 	var st string
 	var overdue bool
 	c := &cobra.Command{
-		Use:   "list",
+		Use: "list",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -551,8 +577,8 @@ func cmdReminderList(open opener) *cobra.Command {
 
 func cmdReminderShow(open opener) *cobra.Command {
 	return &cobra.Command{
-		Use:   "show ID",
-		Args:  cobra.ExactArgs(1),
+		Use:  "show ID",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -573,8 +599,8 @@ func cmdReminderShow(open opener) *cobra.Command {
 
 func cmdReminderDismiss(open opener) *cobra.Command {
 	return &cobra.Command{
-		Use:   "dismiss ID",
-		Args:  cobra.ExactArgs(1),
+		Use:  "dismiss ID",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -596,8 +622,8 @@ func cmdReminderDismiss(open opener) *cobra.Command {
 func cmdReminderSnooze(open opener) *cobra.Command {
 	var until string
 	c := &cobra.Command{
-		Use:   "snooze ID",
-		Args:  cobra.ExactArgs(1),
+		Use:  "snooze ID",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -620,8 +646,8 @@ func cmdReminderSnooze(open opener) *cobra.Command {
 
 func cmdReminderUnsnooze(open opener) *cobra.Command {
 	return &cobra.Command{
-		Use:   "unsnooze ID",
-		Args:  cobra.ExactArgs(1),
+		Use:  "unsnooze ID",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -743,9 +769,13 @@ func cmdPlanTree(open opener) *cobra.Command {
 }
 
 func cmdPlanStatus(open opener) *cobra.Command {
-	return &cobra.Command{
-		Use:   "status",
-		Short: "Plan delivery counts",
+	var global bool
+	c := &cobra.Command{
+		Use:   "status [SLUG_OR_ID]",
+		Short: "Plan delivery counts (scoped to the plan when SLUG_OR_ID is given)",
+		Long: "With a plan reference, counts that plan's items only. Without one (or with " +
+			"--global), counts every plan item in the ledger — the fleet dashboard view.",
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -755,22 +785,50 @@ func cmdPlanStatus(open opener) *cobra.Command {
 			if err := ctx.RequireDB(); err != nil {
 				return err
 			}
+			query := func(status string) string {
+				return `SELECT COUNT(*) FROM plan_items WHERE status='` + status + `'`
+			}
 			var planned, inProg, done int
-			_ = ctx.DB.QueryRow(`SELECT COUNT(*) FROM plan_items WHERE status='planned'`).Scan(&planned)
-			_ = ctx.DB.QueryRow(`SELECT COUNT(*) FROM plan_items WHERE status='in_progress'`).Scan(&inProg)
-			_ = ctx.DB.QueryRow(`SELECT COUNT(*) FROM plan_items WHERE status='done'`).Scan(&done)
+			if len(args) == 1 && !global {
+				planID, err := planning.ResolvePlanID(ctx.DB, args[0])
+				if err != nil {
+					return notFoundError(err.Error())
+				}
+				scoped := func(status string) {
+					var n int
+					_ = ctx.DB.QueryRow(
+						`SELECT COUNT(*) FROM plan_items WHERE status=? AND plan_id=?`, status, planID).Scan(&n)
+					switch status {
+					case "planned":
+						planned = n
+					case "in_progress":
+						inProg = n
+					case "done":
+						done = n
+					}
+				}
+				scoped("planned")
+				scoped("in_progress")
+				scoped("done")
+			} else {
+				_ = ctx.DB.QueryRow(query("planned")).Scan(&planned)
+				_ = ctx.DB.QueryRow(query("in_progress")).Scan(&inProg)
+				_ = ctx.DB.QueryRow(query("done")).Scan(&done)
+			}
 			payload := map[string]int{"planned": planned, "in_progress": inProg, "done": done}
 			return ctx.Out.PrintData(payload)
 		},
 	}
+	c.Flags().BoolVar(&global, "global", false, "aggregate across all plans even when a plan reference is given")
+	return c
 }
 
 func cmdPlanMilestoneAdd(open opener) *cobra.Command {
 	var planID, body string
 	var number int
 	c := &cobra.Command{
-		Use:   "add TITLE",
-		Args:  cobra.MinimumNArgs(1),
+		Use:  "add TITLE",
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -804,7 +862,7 @@ func cmdPlanMilestoneAdd(open opener) *cobra.Command {
 func cmdPlanMilestoneList(open opener) *cobra.Command {
 	var planID string
 	c := &cobra.Command{
-		Use:   "list",
+		Use: "list",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -817,6 +875,14 @@ func cmdPlanMilestoneList(open opener) *cobra.Command {
 			if planID == "" {
 				return usageError("--plan is required")
 			}
+			resolved, err := planning.ResolvePlanID(ctx.DB, planID)
+			if err != nil {
+				if errors.Is(err, planning.ErrPlanNotFound) {
+					return notFoundError("plan not found: " + planID)
+				}
+				return err
+			}
+			planID = resolved
 			rows, err := planning.ListMilestones(ctx.DB, planID)
 			if err != nil {
 				return err
@@ -824,14 +890,14 @@ func cmdPlanMilestoneList(open opener) *cobra.Command {
 			return ctx.Out.PrintData(rows)
 		},
 	}
-	c.Flags().StringVar(&planID, "plan", "", "plan id")
+	c.Flags().StringVar(&planID, "plan", "", "plan slug or id")
 	return c
 }
 
 func cmdPlanMilestoneStatus(open opener) *cobra.Command {
 	return &cobra.Command{
-		Use:   "status ID STATUS",
-		Args:  cobra.ExactArgs(2),
+		Use:  "status ID STATUS",
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -856,7 +922,7 @@ func cmdPlanMilestoneStatus(open opener) *cobra.Command {
 func cmdPlanFileAdd(open opener) *cobra.Command {
 	var planItem, path, role string
 	c := &cobra.Command{
-		Use:   "add",
+		Use: "add",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -886,7 +952,7 @@ func cmdPlanItemList(open opener) *cobra.Command {
 	var planID, milestoneID, st string
 	var legacy bool
 	c := &cobra.Command{
-		Use:   "list",
+		Use: "list",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -899,6 +965,16 @@ func cmdPlanItemList(open opener) *cobra.Command {
 			if err := validateEnum("status", st, []string{"planned", "in_progress", "done", "wontfix", "all"}); err != nil {
 				return err
 			}
+			if planID != "" {
+				resolved, err := planning.ResolvePlanID(ctx.DB, planID)
+				if err != nil {
+					if errors.Is(err, planning.ErrPlanNotFound) {
+						return notFoundError("plan not found: " + planID)
+					}
+					return err
+				}
+				planID = resolved
+			}
 			rows, err := planning.ListItems(ctx.DB, planning.ItemFilter{
 				PlanID: planID, MilestoneID: milestoneID, Status: st, LegacyOnly: legacy, Limit: effectiveListLimit(50),
 			})
@@ -908,7 +984,7 @@ func cmdPlanItemList(open opener) *cobra.Command {
 			return ctx.Out.PrintData(rows)
 		},
 	}
-	c.Flags().StringVar(&planID, "plan", "", "plan id")
+	c.Flags().StringVar(&planID, "plan", "", "plan slug or id")
 	c.Flags().StringVar(&milestoneID, "milestone", "", "milestone id")
 	c.Flags().StringVar(&st, "status", "", "status filter (planned|in_progress|done|wontfix|all)")
 	c.Flags().BoolVar(&legacy, "legacy", false, "only legacy flat items")
@@ -918,8 +994,8 @@ func cmdPlanItemList(open opener) *cobra.Command {
 func cmdPlanItemStatus(open opener) *cobra.Command {
 	var note string
 	c := &cobra.Command{
-		Use:   "status ID STATUS",
-		Args:  cobra.ExactArgs(2),
+		Use:  "status ID STATUS",
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
