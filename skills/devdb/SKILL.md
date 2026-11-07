@@ -163,6 +163,40 @@ Conflict policy is `INSERT OR IGNORE` — if the source row already exists, rest
 
 For multi-project setups, run `devdb hub sync` so `hub dashboard` reflects current state, then loop registered projects (`devdb hub list`) with `devdb --repo <path> archive run --yes`. Skip repos with active in-flight plan items if an agent may still be editing them.
 
+## Multi-agent rule: one checkout, one ledger
+
+Two agents on one machine will silently diverge unless both point at the same files. This is not hypothetical — root and `hermes` each resolved `~` to their own home and ended up with two hubs and two copies of the same project ledger, and nobody noticed because each agent's `devdb status` looked fine. Rules, in priority order:
+
+**1. Always pass `--repo` and `--db` explicitly.** Auto-detection walks up to the nearest `.devdb/`, so a command run from a subdirectory can write into a parent project's ledger. `--repo` alone is not enough if a wrapper or a stray `.devdb/` changes the answer — pass `--db` too when the ledger path is not the one implied by `--repo`:
+
+```bash
+# correct in a shared setup
+sudo -u hermes devdb --repo /srv/devdb/devdb-go \
+  --db /srv/devdb/devdb-go/.devdb/development.db feedback add '...' --role model
+```
+
+**2. Never create a second checkout of the same project.** A second clone has its own `.devdb/development.db` and immediately becomes a competing source of truth; the hub then lists the project twice and duplicate ids appear in `hub audit`. If an agent needs the repo, it uses the canonical path (on this box `/srv/devdb/devdb-go`, deliberately outside any `0700` home so every user can traverse it). A symlink from the old location is fine; a second clone is not. If you find one, stop and merge it — do not write to it.
+
+**3. Configure the hub once, system-wide, not per user.** `devdb` resolves hub paths in this order: explicit flag → `DEVDB_METADATA_DB` / `DEVDB_REGISTRY` → config file → `$HOME` default. The config file is searched at `$DEVDB_CONFIG`, then `$XDG_CONFIG_HOME/devdb/config.json`, `~/.config/devdb/config.json`, and finally `/etc/devdb/config.json`. A single `/etc/devdb/config.json` makes every user on the box share one hub with no flags and no environment setup:
+
+```json
+{ "metadata_db": "/var/lib/devdb/hub/metadata.db",
+  "registry":    "/var/lib/devdb/hub/.devdb-projects" }
+```
+
+Put the shared files on a path that is group-writable by every agent's user (e.g. `root:hermes`, mode `2775` for the directory and `0664` for the files). Never leave them under a `0700` home, and never rely on a per-user `~/.devdb` when more than one agent writes.
+
+**4. Report counts as `open=N, closed=M, total=N+M (asof=<ISO8601>)`.** `devdb ... list` filters to `status=open` by default and `--all` only expands limits — it does **not** include closed rows. A bare total from a list output is therefore wrong, and it has already cost one published memo its central claim. Always state open and closed separately with the timestamp of the read. If you need both, query them explicitly rather than assuming `--all` covers it.
+
+**5. Verify cross-agent visibility after any path or ownership change.** The check is two commands as two users against the same ledger, and they must agree:
+
+```bash
+devdb --repo /srv/devdb/devdb-go feedback list --status all --all --json | <count>
+sudo -u hermes devdb --repo /srv/devdb/devdb-go feedback list --status all --all --json | <count>
+```
+
+File permissions are the usual culprit: a readable database is not enough if a parent directory is `0700`, because traversal is denied before the file is ever opened. `devdb --db <path>` succeeding for one user and failing `permission denied` for another is a directory-mode problem, not a SQLite lock problem.
+
 ## Workflow bracket
 
 Bracket real work with these commands:
