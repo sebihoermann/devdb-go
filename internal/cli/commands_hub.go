@@ -17,8 +17,8 @@ var (
 
 func cmdHub(openCtx opener) *cobra.Command {
 	h := &cobra.Command{Use: "hub", Short: "Cross-project metadata hub"}
-	h.PersistentFlags().StringVar(&flagMetadataDB, "metadata-db", "", "hub database path (default: ~/.devdb/metadata.db)")
-	h.PersistentFlags().StringVar(&flagRegistry, "registry", "", "project registry path (default: ~/.devdb-projects)")
+	h.PersistentFlags().StringVar(&flagMetadataDB, "metadata-db", "", "hub database path (default: DEVDB_METADATA_DB, then config metadata_db, then ~/.devdb/metadata.db)")
+	h.PersistentFlags().StringVar(&flagRegistry, "registry", "", "project registry path (default: DEVDB_REGISTRY, then config registry, then ~/.devdb-projects)")
 	h.AddCommand(
 		cmdHubRegister(openCtx),
 		cmdHubUnregister(openCtx),

@@ -186,3 +186,78 @@ func TestOpenHub(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestResolveConfigFilePrecedence(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("DEVDB_METADATA_DB", "")
+	t.Setenv("DEVDB_REGISTRY", "")
+
+	cfgDir := filepath.Join(home, ".config", "devdb")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfgPath := filepath.Join(cfgDir, "config.json")
+	if err := os.WriteFile(cfgPath, []byte(`{"metadata_db":"`+filepath.Join(home, "shared", "metadata.db")+`","registry":"~/shared/.devdb-projects"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	wantMeta := filepath.Join(home, "shared", "metadata.db")
+	if got := hub.ResolveMetadataDB(""); got != wantMeta {
+		t.Fatalf("config metadata=%q want %q", got, wantMeta)
+	}
+	wantReg := filepath.Join(home, "shared", ".devdb-projects")
+	if got := hub.ResolveRegistry(""); got != wantReg {
+		t.Fatalf("config registry=%q want %q", got, wantReg)
+	}
+
+	// Env beats config.
+	envMeta := filepath.Join(home, "env", "metadata.db")
+	t.Setenv("DEVDB_METADATA_DB", envMeta)
+	if got := hub.ResolveMetadataDB(""); got != envMeta {
+		t.Fatalf("env metadata=%q want %q", got, envMeta)
+	}
+	t.Setenv("DEVDB_METADATA_DB", "")
+	t.Setenv("DEVDB_REGISTRY", "~/env-registry")
+	if got := hub.ResolveRegistry(""); got != filepath.Join(home, "env-registry") {
+		t.Fatalf("env registry=%q", got)
+	}
+	t.Setenv("DEVDB_REGISTRY", "")
+
+	// Flag beats everything, and expands ~.
+	flagMeta := filepath.Join(home, "flag", "metadata.db")
+	if got := hub.ResolveMetadataDB(flagMeta); got != flagMeta {
+		t.Fatalf("flag metadata=%q want %q", got, flagMeta)
+	}
+
+	// DEVDB_CONFIG points at an alternate file and wins over the XDG default.
+	altPath := filepath.Join(home, "alt-config.json")
+	if err := os.WriteFile(altPath, []byte(`{"registry":"/var/lib/devdb/hub/.devdb-projects"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DEVDB_CONFIG", altPath)
+	if got := hub.ResolveRegistry(""); got != "/var/lib/devdb/hub/.devdb-projects" {
+		t.Fatalf("DEVDB_CONFIG registry=%q", got)
+	}
+	t.Setenv("DEVDB_CONFIG", "")
+}
+
+func TestResolveMalformedConfigIsIgnored(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("DEVDB_METADATA_DB", "")
+	t.Setenv("DEVDB_REGISTRY", "")
+
+	cfgDir := filepath.Join(home, ".config", "devdb")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := hub.ResolveMetadataDB(""), filepath.Join(home, ".devdb", "metadata.db"); got != want {
+		t.Fatalf("malformed config metadata=%q want default %q", got, want)
+	}
+}
