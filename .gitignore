@@ -12,3 +12,4 @@ docs/brainstorm-*.md
 
 # Hermes plan artifacts (repo-local, not part of the product)
 .hermes/
+__pycache__/

@@ -150,10 +150,13 @@ right now, I would:
    on a query that names the symbol you're about to look at; if you
    can't formulate one, you probably don't need grep either".
 
-4. **Add a `devdb reconcile-as-you-close` paragraph.** "Closing the
-   last item in a plan should be followed by `devdb plan reconcile
-   --apply` to flip the parent plan/milestone; reconcile is the
-   missing closing step."
+4. **Reconcile as you close.** "Closing the last item in a plan should be
+   followed by `devdb plan reconcile --apply` to flip the parent
+   plan/milestone; reconcile is the missing closing step."
+   *(Superseded: this was written as a proposal for a dedicated
+   `reconcile-as-you-close` verb. That verb was never built — the accepted
+   answer was to call `plan reconcile --apply` directly, which is what the
+   closure ritual in `skills/devdb/SKILL.md` now says to do.)*
 
 5. **Add an explicit brainstorm-vs-execution test** to the modes
    section: "Are you about to edit a file in this turn, run a

@@ -39,8 +39,12 @@ AVAILABLE = re.compile(r"^Available Commands:\s*$")
 SUBCMD = re.compile(r"^  ([a-z][a-z0-9-]*)\s+\S", re.MULTILINE)
 
 # Markdown code markers.
-FENCE = re.compile(r"```.*?```", re.DOTALL)
+FENCE = re.compile(r"```(\w*)[^\n]*\n(.*?)```", re.DOTALL)
 INLINE_CODE = re.compile(r"`([^`\n]+)`")
+# Fence languages whose content is commands. A ```text block is a diagram, a
+# ```python block is a program, and neither is a place a reader copy-pastes a
+# devdb invocation from — scanning them produces findings that are not real.
+COMMAND_FENCES = {"", "bash", "sh", "shell", "zsh", "console", "cron"}
 # A command noun: lowercase, may contain hyphens. Deliberately excludes
 # uppercase, digits-leading, and anything with / < > $ " ' = | in it.
 NOUN = re.compile(r"^[a-z][a-z0-9-]*$")
@@ -115,7 +119,11 @@ def command_lines(path: Path, text: str) -> list[str]:
     """Return the lines that actually contain a devdb invocation."""
     suffix = path.suffix
     if suffix == ".md":
-        chunks = [m.group(0) for m in FENCE.finditer(text)]
+        chunks = [
+            m.group(2)
+            for m in FENCE.finditer(text)
+            if m.group(1) in COMMAND_FENCES
+        ]
         chunks += [m.group(1) for m in INLINE_CODE.finditer(text)]
         lines: list[str] = []
         for chunk in chunks:
