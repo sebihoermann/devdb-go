@@ -16,6 +16,21 @@ type UnregisteredRepo struct {
 	SuggestedAlias string `json:"suggested_alias"`
 }
 
+// AutoRegisterResult reports what an auto-register walk found and wrote.
+type AutoRegisterResult struct {
+	Discovered []string        `json:"discovered"`
+	Registered []string        `json:"registered"`
+	Conflicts  []aliasConflict `json:"alias_conflicts,omitempty"`
+}
+
+// aliasConflict records an alias that was already bound to a different root, so
+// the walk refused to repoint it.
+type aliasConflict struct {
+	Alias   string `json:"alias"`
+	Kept    string `json:"kept"`
+	Skipped string `json:"skipped"`
+}
+
 // FindUnregistered walks each scope for .devdb/development.db files and
 // returns the ones whose repo root is not present in the registry. This is
 // the doctor-side complement to `hub register --auto`: audit/dashboards only

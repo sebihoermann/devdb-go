@@ -205,15 +205,41 @@ func Unregister(alias, registry, metadataDB string) error {
 // AutoRegister walks `scope` looking for `.devdb/development.db` files and
 // registers every parent directory as a hub project. Returns the list of
 // newly-registered aliases (already-registered projects are skipped silently).
-func AutoRegister(scope, registry, metadataDB string) ([]string, error) {
+// AutoRegister walks a scope for ledgers and registers every one it finds.
+//
+// discovered lists each root found, whether or not it was written; registered
+// lists only those actually added. With dryRun nothing is written, so the
+// count can be compared against `hub doctor --scan` before touching state.
+//
+// An existing alias never moves to a different path. Two checkouts can share a
+// directory name, and silently repointing `devdb-go` away from its ledger would
+// make every later audit read the wrong project; the newcomer gets a suffixed
+// alias instead.
+func AutoRegister(scope, registry, metadataDB string, dryRun bool) (AutoRegisterResult, error) {
 	if scope == "" {
 		scope = "."
 	}
 	absScope, err := filepath.Abs(scope)
 	if err != nil {
-		return nil, err
+		return AutoRegisterResult{}, err
 	}
-	var registered []string
+	res := AutoRegisterResult{}
+
+	existing, err := ReadRegistry(registry)
+	if err != nil {
+		return AutoRegisterResult{}, err
+	}
+	byAlias := map[string]string{}
+	for _, p := range existing {
+		byAlias[p.Alias] = p.Root
+	}
+	knownRoot := map[string]bool{}
+	for _, p := range existing {
+		if abs, err := filepath.Abs(expandHome(p.Root)); err == nil {
+			knownRoot[abs] = true
+		}
+	}
+
 	walkErr := filepath.WalkDir(absScope, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -233,12 +259,38 @@ func AutoRegister(scope, registry, metadataDB string) ([]string, error) {
 		}
 		repoRoot := filepath.Dir(filepath.Dir(path))
 		alias := filepath.Base(repoRoot)
+		if owner, taken := byAlias[alias]; taken && owner != repoRoot {
+			res.Conflicts = append(res.Conflicts, aliasConflict{Alias: alias, Kept: owner, Skipped: repoRoot})
+			alias = freeAlias(alias, repoRoot, byAlias)
+		}
+		res.Discovered = append(res.Discovered, repoRoot)
+		if knownRoot[repoRoot] {
+			return nil
+		}
+		if dryRun {
+			res.Registered = append(res.Registered, alias)
+			return nil
+		}
 		if _, err := Register(repoRoot, alias, registry, metadataDB); err == nil {
-			registered = append(registered, alias)
+			res.Registered = append(res.Registered, alias)
+			byAlias[alias] = repoRoot
+			knownRoot[repoRoot] = true
 		}
 		return nil
 	})
-	return registered, walkErr
+	return res, walkErr
+}
+
+// freeAlias derives an alias that no other path holds, so a collision appends a
+// stable counter rather than stealing the existing name.
+func freeAlias(base, root string, byAlias map[string]string) string {
+	for i := 2; i < 1000; i++ {
+		candidate := fmt.Sprintf("%s-%d", base, i)
+		if owner, taken := byAlias[candidate]; !taken || owner == root {
+			return candidate
+		}
+	}
+	return base
 }
 
 // SyncAll refreshes every registered project into the hub.

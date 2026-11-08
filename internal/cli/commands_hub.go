@@ -36,7 +36,7 @@ func cmdHub(openCtx opener) *cobra.Command {
 
 func cmdHubRegister(openCtx opener) *cobra.Command {
 	var alias string
-	var auto bool
+	var auto, autoDryRun bool
 	var scope string
 	c := &cobra.Command{
 		Use:   "register [PATH]",
@@ -49,12 +49,25 @@ func cmdHubRegister(openCtx opener) *cobra.Command {
 			}
 			defer ctx.Close()
 			if auto {
-				registered, err := hub.AutoRegister(scope, flagRegistry, flagMetadataDB)
+				res, err := hub.AutoRegister(scope, flagRegistry, flagMetadataDB, autoDryRun)
 				if err != nil {
 					return err
 				}
-				ctx.Out.Hint("auto-registered %d projects", len(registered))
-				return ctx.Out.WriteResult(strings.Join(registered, ","), map[string]any{"registered": registered})
+				for _, c := range res.Conflicts {
+					ctx.Out.Hint("kept alias %q on %s; registered %s under a new alias", c.Alias, c.Kept, c.Skipped)
+				}
+				if autoDryRun {
+					ctx.Out.Hint("would register %d of %d discovered project(s)", len(res.Registered), len(res.Discovered))
+					return ctx.Out.WriteResult(strings.Join(res.Registered, ","), map[string]any{
+						"discovered": res.Discovered, "registered": res.Registered,
+						"conflicts": res.Conflicts,
+					})
+				}
+				ctx.Out.Hint("auto-registered %d project(s)", len(res.Registered))
+				return ctx.Out.WriteResult(strings.Join(res.Registered, ","), map[string]any{
+					"discovered": res.Discovered, "registered": res.Registered,
+					"conflicts": res.Conflicts,
+				})
 			}
 			if len(args) != 1 {
 				return fmt.Errorf("register requires PATH (or use --auto)")
@@ -70,6 +83,7 @@ func cmdHubRegister(openCtx opener) *cobra.Command {
 	c.Flags().StringVar(&alias, "alias", "", "project alias (default: directory name)")
 	c.Flags().BoolVar(&auto, "auto", false, "walk SCOPE and register every .devdb/development.db found")
 	c.Flags().StringVar(&scope, "scope", ".", "scope directory for --auto (default: cwd)")
+	c.Flags().BoolVar(&autoDryRun, "dry-run", false, "with --auto: report what would be registered, write nothing")
 	return c
 }
 
