@@ -9,3 +9,6 @@ coverage.out
 # be promoted to execution mode (committed) or stay out of git entirely.
 docs/*-brainstorm.md
 docs/brainstorm-*.md
+
+# Hermes plan artifacts (repo-local, not part of the product)
+.hermes/

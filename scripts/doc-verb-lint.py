@@ -182,6 +182,24 @@ def _noun_run(rest: str) -> list[str] | None:
     return nouns or None
 
 
+def _find_line(file_lines: list[str], needle: str) -> int | None:
+    """Locate `needle` in the file, returning its 1-based line number.
+
+    command_lines may hand back a normalised version of the line (the plist
+    branch joins argv elements), so fall back to a substring match on the
+    first token before giving up.
+    """
+    stripped = needle.strip()
+    for i, line in enumerate(file_lines, start=1):
+        if stripped and stripped in line:
+            return i
+    head = stripped.split(" devdb")[0][:40]
+    for i, line in enumerate(file_lines, start=1):
+        if head and head in line:
+            return i
+    return None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--bin", action="append", default=[], help="devdb binary (repeatable)")
@@ -214,7 +232,11 @@ def main() -> int:
         if path.suffix not in DOC_SUFFIXES or rel in skips:
             continue
         text = path.read_text(errors="replace")
-        for lineno, line in enumerate(command_lines(path, text), start=1):
+        # command_lines concatenates fence chunks, so its own line numbering
+        # does not match the file. Search the real text for the line that
+        # produced the finding so file:line is where a reader should look.
+        file_lines = text.splitlines()
+        for line in command_lines(path, text):
             nouns = nouns_after(line)
             if not nouns:
                 continue
@@ -223,6 +245,7 @@ def main() -> int:
             # even though neither `hub` nor `sync` is a top-level command.
             if any(tuple(nouns[:n]) in tree for n in range(len(nouns), 0, -1)):
                 continue
+            lineno = _find_line(file_lines, line) or 0
             dead.append(f"{rel}:{lineno}: devdb {' '.join(nouns)}")
 
     if dead:

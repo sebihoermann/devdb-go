@@ -98,7 +98,7 @@ ln -sfn /path/to/devdb-go/skills/devdb ~/.codex/skills/devdb
 cmd/devdb/     — CLI entrypoint
 cmd/devdb-openclaw/ — optional OpenClaw memory adapter
 internal/      — domain services, storage, migrations
-skills/devdb/  — agent skill (SKILL.md, SPEC.md)
+skills/devdb/  — agent skill (SKILL.md)
 docs/          — parity matrix, installation model, hub sync notes
 ```
 

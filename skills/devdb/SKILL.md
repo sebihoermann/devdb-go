@@ -302,6 +302,22 @@ The closure ritual is non-negotiable. If you skip step 2 and jump straight to `p
 
 **Re-read user premises before scoping.** If the user sounds confused, restate the premise in plain words and ask one targeted question.
 
+## Design principles (from the original spec)
+
+These eight came out of the 2026-05-22 brainstorm that specified the arch-notes
+and code-review features. They survived that feature and they survive the
+Python→Go cutover, so they are recorded here rather than in a design doc that
+described a grammar nothing speaks any more.
+
+1. **State-first beats document-first.** The ledger is the memory. The LLM renders from state and queries it; it never tries to *be* it. Storyblender's pivot from markdown-driven to state-engine-driven is the empirical evidence — one month of pain proved it.
+2. **No hybrids.** One storage primitive (SQLite) carries everything queryable. Markdown stays for human-facing fronts (`README.md`, `SKILL.md`) only. A design that combines devdb + markdown + Obsidian + an ad-hoc convention is wrong.
+3. **Frictionless or it does not stick.** Judge every change by whether it removes a layer or adds one. Layers fail.
+4. **No walls of text.** When uncertain, ask one direct question instead of producing fluent uncertainty. Past ~40 lines or 5 distinct ideas the reader loses the thread.
+5. **The model is a scribe in brainstorm mode.** Capture liberally, prune later. The conversation is the work; the logging is the value.
+6. **Async observation, no interruption.** Log the smell and keep working. Interrupting to ask "should I fix this?" breaks flow for no benefit.
+7. **Re-read user premises before scoping.** Most WTF moments are context gaps, not personality clashes.
+8. **First-principles is the filter.** If an idea only sounds good because it is fashionable, suspect it. SQLite ATTACH federation passes (it emerged from pain); Obsidian as the cross-project layer does not.
+
 ## CLI conventions
 
 Hold these in mind so scripted use does not break:

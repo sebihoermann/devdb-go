@@ -172,7 +172,8 @@ stale verification
 - `skills/devdb/SKILL.md` — add `hub audit` to the cheatsheet
   (line ~362) and to the "Other useful reads" block (line ~351).
   One-line edits each.
-- `skills/devdb/SPEC.md` — append a short subsection under M7
+- The audit design is recorded in `internal/domain/hub/audit.go` and
+   `skills/devdb/SKILL.md` Playbook 9
   federation noting the new verb and its flag contract.
 - `CLAUDE.md` — one-line add to "Top 5 verbs" section: `hub audit`
   for cross-project open issues.
@@ -190,7 +191,8 @@ stale verification
 Create plan `devdb-go · hub-audit`, milestone M1, items:
 
 1. **Design** — `AuditOptions` / `AuditReport` / `AuditSection`
-   structs landed in `audit.go`; JSON sample written into SPEC.md.
+   structs landed in `audit.go`; the JSON shape is asserted in
+   `internal/domain/hub/audit_archive_test.go`.
    Acceptance: `go build ./...` succeeds; types compile.
 2. **Implement** — `audit.go` + `cmdHubAudit` + `cmdHub` slice
    registration. Acceptance: `devdb hub audit --help` shows the verb;
@@ -198,7 +200,7 @@ Create plan `devdb-go · hub-audit`, milestone M1, items:
    snapshot above; exit 0 on empty registry.
 3. **Tests** — `audit_test.go` covers each section + skip cases.
    Acceptance: `go test ./...` green; new file ≥ 90% line coverage.
-4. **Docs** — SKILL.md + SPEC.md + CLAUDE.md updates. Acceptance:
+4. **Docs** — SKILL.md + CLAUDE.md updates. Acceptance:
    `devdb help hub audit` short-help is one line; cheatsheet entry
    present; SPEC section present.
 5. **Verification** — `go build -o devdb ./cmd/devdb` +
