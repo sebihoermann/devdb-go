@@ -1148,14 +1148,13 @@ devdb plan item close <id-prefix> --note "free-form annotation" --evidence "<com
 
 Closes the item and, when it is the last open item in its milestone or
 plan, auto-cascades the parent statuses to done in a single transaction.
-Run 'devdb plan acceptance meet' calls sequentially from one shell, not
-in parallel — see skills/devdb/SKILL.md "Closure ritual".`,
+Meet each acceptance criterion first — see skills/devdb/SKILL.md "Closure ritual".`,
 	"plan acceptance meet": `devdb plan acceptance meet <criterion-id> --evidence "<commit-or-note>"
 
-Run these sequentially from one shell, not in parallel from multiple
-background processes. Parallel invocations from separate processes have
-been observed to surface SQLITE_BUSY even with the in-process retry
-budget; sequential keeps the commit window contention-free.`,
+Writes inside storage.WithTx, so it gets the same bounded, jittered
+SQLITE_BUSY retry as every other write path: meeting criteria in parallel
+from separate processes is safe. The old sequential-discipline rule was a
+workaround for MeetAcceptance running a bare Exec and is retired.`,
 	"feedback close": `devdb feedback close <id> --proposed-fix "Resolved by <commit> which adds <artifact>: <one-line description>"
 
 Name the commit + the artifact, not the closing agent's behavior. See
