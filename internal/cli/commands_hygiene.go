@@ -237,6 +237,7 @@ func cmdAnalytics(open opener) *cobra.Command {
 func cmdAnalyticsMissed(open opener) *cobra.Command {
 	var since string
 	var limit int
+	var allOrigins bool
 	c := &cobra.Command{
 		Use:   "missed",
 		Short: "List recent failed devdb invocations",
@@ -249,7 +250,7 @@ func cmdAnalyticsMissed(open opener) *cobra.Command {
 			if err := ctx.RequireDB(); err != nil {
 				return err
 			}
-			rows, err := analytics.ListMissedCalls(ctx.DB, since, applyAllLimit(limit))
+			rows, err := analytics.ListMissedCallsFiltered(ctx.DB, since, applyAllLimit(limit), allOrigins)
 			if err != nil {
 				return err
 			}
@@ -273,12 +274,14 @@ func cmdAnalyticsMissed(open opener) *cobra.Command {
 	}
 	c.Flags().StringVar(&since, "since", "", "ISO timestamp (default: 7 days ago)")
 	c.Flags().IntVar(&limit, "limit", 50, "max rows")
+	c.Flags().BoolVar(&allOrigins, "all-origins", false, "include test and probe rows (default: cli only)")
 	return c
 }
 
 func cmdAnalyticsSummary(open opener) *cobra.Command {
 	var since string
 	var windowDays int
+	var allOrigins bool
 	c := &cobra.Command{
 		Use:   "summary",
 		Short: "Grouped summary of failed invocation patterns",
@@ -291,7 +294,7 @@ func cmdAnalyticsSummary(open opener) *cobra.Command {
 			if err := ctx.RequireDB(); err != nil {
 				return err
 			}
-			sum, err := analytics.MissedSummary(ctx.DB, since, windowDays)
+			sum, err := analytics.MissedSummaryFiltered(ctx.DB, since, windowDays, allOrigins)
 			if err != nil {
 				return err
 			}
@@ -316,6 +319,7 @@ func cmdAnalyticsSummary(open opener) *cobra.Command {
 	}
 	c.Flags().StringVar(&since, "since", "", "ISO timestamp (default: 7 days ago)")
 	c.Flags().IntVar(&windowDays, "window-days", 7, "display window in days")
+	c.Flags().BoolVar(&allOrigins, "all-origins", false, "include test and probe rows (default: cli only)")
 	return c
 }
 

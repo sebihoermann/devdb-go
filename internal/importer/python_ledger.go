@@ -301,7 +301,7 @@ func copySpecs() []copySpec {
 			SELECT id, command, scope, status, git_sha, exit_code, output, notes, started_at, finished_at, dismissed_at, dismissed_reason, created_at, model_id FROM legacy.verification_runs`},
 		{"verification_inputs", `INSERT OR REPLACE INTO verification_inputs SELECT id, run_id, file_path, role, content_hash, created_at, model_id FROM legacy.verification_inputs`},
 		{"verification_failures", `INSERT OR REPLACE INTO verification_failures SELECT id, run_id, test_id, file_path, headline, message_excerpt, failure_kind, created_at, model_id FROM legacy.verification_failures`},
-		{"missed_cli_calls", `INSERT OR REPLACE INTO missed_cli_calls SELECT id, raw_argv, normalized_command, failure_kind, error_message, suggested_command, exit_code, cwd, repo_root, model_id, created_at FROM legacy.missed_cli_calls`},
+		{"missed_cli_calls", `INSERT OR REPLACE INTO missed_cli_calls(id, raw_argv, normalized_command, failure_kind, error_message, suggested_command, exit_code, cwd, repo_root, model_id, created_at) SELECT id, raw_argv, normalized_command, failure_kind, error_message, suggested_command, exit_code, cwd, repo_root, model_id, created_at FROM legacy.missed_cli_calls`},
 		{"archive_entries", `INSERT OR REPLACE INTO archive_entries SELECT id, source_table, source_id, payload_json, archived_at, archive_reason FROM legacy.archive_entries`},
 		{"sync_state", `INSERT OR REPLACE INTO sync_state SELECT key, value, updated_at FROM legacy.sync_state`},
 		{"commit_archeology", `INSERT OR REPLACE INTO commit_archeology

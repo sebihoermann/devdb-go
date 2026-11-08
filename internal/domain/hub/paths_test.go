@@ -190,6 +190,9 @@ func TestOpenHub(t *testing.T) {
 func TestResolveConfigFilePrecedence(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	// This test writes a real user-level config and asserts it is found, so it
+	// must step outside the suite-wide hermetic DEVDB_CONFIG pin set by TestMain.
+	t.Setenv(hub.EnvConfig, "")
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("DEVDB_METADATA_DB", "")
 	t.Setenv("DEVDB_REGISTRY", "")
@@ -246,6 +249,7 @@ func TestResolveConfigFilePrecedence(t *testing.T) {
 func TestResolveMalformedConfigIsIgnored(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv(hub.EnvConfig, "")
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("DEVDB_METADATA_DB", "")
 	t.Setenv("DEVDB_REGISTRY", "")

@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/sebihoermann/devdb-go/internal/domain/analytics"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -487,6 +488,12 @@ func TestInProcessPlanningExtended(t *testing.T) {
 }
 
 func TestInProcessHygieneExtended(t *testing.T) {
+	// This test exercises the telemetry read path, so it needs recording on.
+	// Its ledger is a temp one from newInProcessEnv, so the rows written here
+	// never reach a real project ledger.
+	analytics.Enabled = true
+	t.Cleanup(func() { analytics.Enabled = false })
+
 	e := newInProcessEnv(t)
 
 	_, stderr, code := e.runAllow("list-missed-calls")

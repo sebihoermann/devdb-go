@@ -62,6 +62,9 @@ func unknownCommandArgv() []string {
 }
 
 func recordMissedFromError(err error) {
+	if !analytics.Enabled {
+		return
+	}
 	ce, ok := err.(*CLIError)
 	if !ok || ce.Kind == "" {
 		return

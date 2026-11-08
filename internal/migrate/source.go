@@ -351,4 +351,63 @@ ALTER TABLE plan_items ADD COLUMN memory_ref TEXT;
 `)
 		},
 	},
+	{
+		Version:     4,
+		Description: "go:missed_cli_calls origin",
+		Apply: func(tx *sql.Tx) error {
+			var exists int
+			if err := tx.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('missed_cli_calls') WHERE name='origin'`).Scan(&exists); err != nil {
+				return err
+			}
+			if exists == 0 {
+				if err := execStatements(tx, `
+ALTER TABLE missed_cli_calls ADD COLUMN origin TEXT NOT NULL DEFAULT 'cli';
+`); err != nil {
+					return err
+				}
+			}
+			// Backfill the historical test-suite rows in the same pass, and do it
+			// in two passes because cwd alone is not enough.
+			//
+			// Pass 1: any row whose cwd was the source tree's internal/cli package
+			// is unambiguously from the suite; a real invocation is never run from
+			// there.
+			//
+			// Pass 2: the suite also spawns a built binary with the working
+			// directory inherited from the package, so those rows land on the repo
+			// root instead. For those, require BOTH a repo-root cwd AND a literal
+			// fixture argument. The fixture list is the set of placeholder names
+			// and flags the tests pass on purpose; matching only on cwd there would
+			// sweep up genuine agent mistakes made while sitting in the repo.
+			if err := execStatements(tx, `
+UPDATE missed_cli_calls SET origin='test'
+WHERE origin <> 'test'
+  AND (cwd LIKE '%/internal/cli' OR cwd LIKE '%\\internal\\cli');`); err != nil {
+				return err
+			}
+			return execStatements(tx, `
+UPDATE missed_cli_calls SET origin='test'
+WHERE origin <> 'test'
+  AND normalized_command LIKE '%scaffold-plan Title%';
+UPDATE missed_cli_calls SET origin='test'
+WHERE origin <> 'test'
+  AND normalized_command LIKE '%no-such-plan%';
+UPDATE missed_cli_calls SET origin='test'
+WHERE origin <> 'test'
+  AND normalized_command LIKE '%no-such-branch%';
+UPDATE missed_cli_calls SET origin='test'
+WHERE origin <> 'test'
+  AND normalized_command LIKE '%--bogus%';
+UPDATE missed_cli_calls SET origin='test'
+WHERE origin <> 'test'
+  AND normalized_command LIKE '%plan acceptance list --plan-item abc%';
+UPDATE missed_cli_calls SET origin='probe'
+WHERE origin = 'cli'
+  AND (normalized_command LIKE '%--plan nope%'
+    OR normalized_command LIKE '%definitely-not-a-plan%'
+    OR normalized_command LIKE '%no-such-plan-xyz%');
+CREATE INDEX IF NOT EXISTS idx_missed_cli_calls_origin ON missed_cli_calls(origin);
+`)
+		},
+	},
 }

@@ -28,24 +28,42 @@ type FileConfig struct {
 	Registry string `json:"registry,omitempty"`
 }
 
-// configSearchPaths returns the candidate config files in priority order.
-//
-// Order matters: a per-user config beats a system config so a single user can
-// point at a neutral shared hub without editing /etc, and an explicit
-// DEVDB_CONFIG beats everything so probes stay hermetic.
-func configSearchPaths() []string {
+// systemConfigFile is the lowest-priority config location. It is the last
+// candidate so a per-user config can point at a shared hub without editing /etc.
+func systemConfigFile() string {
+	return filepath.Join(string(filepath.Separator), "etc", "devdb", "config.json")
+}
+
+// ConfigSearchPathsForTest returns the config search order computed from
+// explicit roots rather than the ambient environment, so the order (and the
+// presence of the system path) is verifiable on any host. An empty root omits
+// that candidate; production order comes from configSearchPaths.
+func ConfigSearchPathsForTest(xdg, home, sys string) []string {
 	var paths []string
-	if v := os.Getenv(EnvConfig); v != "" {
-		paths = append(paths, v)
-	}
-	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+	if xdg != "" {
 		paths = append(paths, filepath.Join(xdg, "devdb", "config.json"))
 	}
-	if home, err := os.UserHomeDir(); err == nil {
+	if home != "" {
 		paths = append(paths, filepath.Join(home, ".config", "devdb", "config.json"))
 	}
-	paths = append(paths, filepath.Join(string(filepath.Separator), "etc", "devdb", "config.json"))
+	if sys != "" {
+		paths = append(paths, sys)
+	}
 	return paths
+}
+
+// configSearchPaths returns the candidate config files in priority order.
+//
+// Order matters: a per-user config beats the system config so a single user can
+// point at a neutral shared hub without editing /etc. DEVDB_CONFIG bypasses the
+// search order entirely: when set it is the only candidate, which is what keeps
+// probes and tests hermetic on a host that has a real system config.
+func configSearchPaths() []string {
+	if v := os.Getenv(EnvConfig); v != "" {
+		return []string{v}
+	}
+	home, _ := os.UserHomeDir()
+	return ConfigSearchPathsForTest(os.Getenv("XDG_CONFIG_HOME"), home, systemConfigFile())
 }
 
 // LoadFileConfig reads the first readable config file found. A missing file is
