@@ -141,6 +141,20 @@ devdb archive list --since 2026-05-01 --json   # machine-readable, with date fil
 devdb archive list --limit 200                 # raise the cap
 ```
 
+Read one archived row **without restoring it** — `archive show` decodes the stored payload and labels the result `source: archive`:
+
+```bash
+devdb archive show <archive_entry_id>                    # by archive id
+devdb archive show --table plan_items --source-id <orig_id>  # by original id
+```
+
+An id from an old log line or notes file usually no longer exists live — it was swept. Both read paths resolve it instead of reporting a typo:
+
+- `devdb archive show <id>` and `devdb plan item show <id>` accept the archive entry id.
+- `devdb plan item show <short-prefix>` falls back to `archive_entries`, printing `[archived]` plus the exact `archive restore --source-id …` command that brings it back.
+
+So `no match for id prefix` now means genuinely nothing anywhere, not "it was archived last month".
+
 Recover with `archive restore`:
 
 ```bash

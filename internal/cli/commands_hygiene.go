@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -16,7 +17,8 @@ import (
 
 func cmdArchive(open opener) *cobra.Command {
 	arch := failClosed(&cobra.Command{Use: "archive", Short: "Archive historical ledger rows"})
-	arch.AddCommand(cmdArchiveRun(open), cmdArchiveList(open), cmdArchiveRestore(open), cmdArchiveGC(open))
+	arch.AddCommand(cmdArchiveRun(open), cmdArchiveList(open), cmdArchiveShow(open),
+		cmdArchiveRestore(open), cmdArchiveGC(open))
 	return arch
 }
 
@@ -108,6 +110,66 @@ func cmdArchiveList(open opener) *cobra.Command {
 	c.Flags().StringVar(&until, "until", "", "archived_at <= ISO timestamp")
 	c.Flags().IntVar(&limit, "limit", 50, "max rows")
 	return c
+}
+
+func cmdArchiveShow(open opener) *cobra.Command {
+	var table, sourceID string
+	c := &cobra.Command{
+		Use:   "show ID",
+		Short: "Show one archived row with its payload",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx, err := open(cmd)
+			if err != nil {
+				return err
+			}
+			defer ctx.Close()
+			if err := ctx.RequireDB(); err != nil {
+				return err
+			}
+			id := ""
+			if len(args) == 1 {
+				id = args[0]
+			}
+			res, err := archive.Show(ctx.DB, id, table, sourceID)
+			if errors.Is(err, archive.ErrEntryNotFound) {
+				return notFoundError(fmt.Sprintf("no archive entry matches %s", strings.Join(args, " ")))
+			}
+			if err != nil {
+				return &CLIError{Code: ExitUsage, Message: err.Error(), Kind: "missing_argument"}
+			}
+			if ctx.Out.JSON {
+				return ctx.Out.PrintData(res)
+			}
+			lines := []string{
+				fmt.Sprintf("# %s", fieldOr(res.Row, "title", res.SourceID)),
+				fmt.Sprintf("source: %s · table: %s · id: %s", res.Source, res.SourceTable, res.SourceID),
+				fmt.Sprintf("archived_at: %s", res.ArchivedAt),
+			}
+			if res.ArchiveReason != "" {
+				lines = append(lines, fmt.Sprintf("reason: %s", res.ArchiveReason))
+			}
+			if status, ok := res.Row["status"]; ok {
+				lines = append(lines, fmt.Sprintf("status: %v", status))
+			}
+			lines = append(lines, "",
+				fmt.Sprintf("restore with: devdb archive restore --source-id %s --table %s", res.SourceID, res.SourceTable))
+			return ctx.Out.PrintData(output.HumanLines{Lines: lines})
+		},
+	}
+	c.Flags().StringVar(&table, "table", "", "source table (with --source-id instead of an id)")
+	c.Flags().StringVar(&sourceID, "source-id", "", "source row id to look up")
+	return c
+}
+
+// fieldOr returns row[key] as a string, or fallback when absent.
+func fieldOr(row map[string]any, key, fallback string) string {
+	if v, ok := row[key]; ok && v != nil {
+		if s, ok := v.(string); ok && s != "" {
+			return s
+		}
+	}
+	return fallback
 }
 
 func cmdArchiveRestore(open opener) *cobra.Command {

@@ -3,6 +3,7 @@ package archive
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -1068,4 +1069,92 @@ func archiveRow(db *sql.DB, table, srcID string, payload map[string]any, archive
 	}
 	_, err = db.Exec(fmt.Sprintf("DELETE FROM %s WHERE id=?", table), srcID)
 	return err
+}
+
+// ShowResult is a single archived row with its payload decoded, so `archive
+// show` and `plan item show` can print a row that no longer exists live.
+type ShowResult struct {
+	ID            string         `json:"id"`
+	SourceTable   string         `json:"source_table"`
+	SourceID      string         `json:"source_id"`
+	ArchivedAt    string         `json:"archived_at"`
+	ArchiveReason string         `json:"archive_reason,omitempty"`
+	Source        string         `json:"source"`
+	Row           map[string]any `json:"row"`
+}
+
+// ErrEntryNotFound is returned when an archive id matches nothing.
+var ErrEntryNotFound = errors.New("archive entry not found")
+
+// Show returns one archived row by archive-entry id, or by source table plus
+// source id when entryID is empty.
+func Show(db *sql.DB, entryID, sourceTable, sourceID string) (ShowResult, error) {
+	q := `SELECT id, source_table, source_id, archived_at, COALESCE(archive_reason,''), payload_json
+		FROM archive_entries WHERE `
+	args := []any{}
+	switch {
+	case entryID != "":
+		q += `id = ?`
+		args = append(args, entryID)
+	case sourceTable != "" && sourceID != "":
+		q += `source_table = ? AND source_id = ?`
+		args = append(args, sourceTable, sourceID)
+	default:
+		return ShowResult{}, fmt.Errorf("supply an id, or --table with --source-id")
+	}
+
+	var res ShowResult
+	var payload string
+	err := db.QueryRow(q, args...).Scan(
+		&res.ID, &res.SourceTable, &res.SourceID, &res.ArchivedAt, &res.ArchiveReason, &payload)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ShowResult{}, ErrEntryNotFound
+	}
+	if err != nil {
+		return ShowResult{}, err
+	}
+	if err := json.Unmarshal([]byte(payload), &res.Row); err != nil {
+		return ShowResult{}, fmt.Errorf("decode archived payload: %w", err)
+	}
+	res.Source = "archive"
+	return res, nil
+}
+
+// FindArchivedBySourceID reports whether a row was archived, given its live
+// table and its (former) primary key. This is what lets `plan item show abc`
+// explain "archived" instead of "no match for id prefix".
+func FindArchivedBySourceID(db *sql.DB, sourceTable, sourceID string) (ShowResult, bool, error) {
+	res, err := Show(db, "", sourceTable, sourceID)
+	if errors.Is(err, ErrEntryNotFound) {
+		return ShowResult{}, false, nil
+	}
+	if err != nil {
+		return ShowResult{}, false, err
+	}
+	return res, true, nil
+}
+
+// ArchivedIDsByPrefix returns archived source ids of a table that start with
+// prefix, so a short id from a log line still resolves after the sweep.
+func ArchivedIDsByPrefix(db *sql.DB, sourceTable, prefix string) ([]string, error) {
+	if prefix == "" {
+		return nil, nil
+	}
+	rows, err := db.Query(`
+		SELECT DISTINCT source_id FROM archive_entries
+		WHERE source_table = ? AND source_id LIKE ?
+		ORDER BY archived_at DESC`, sourceTable, prefix+"%")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }

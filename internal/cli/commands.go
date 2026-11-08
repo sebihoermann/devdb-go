@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/sebihoermann/devdb-go/internal/app"
 	"github.com/sebihoermann/devdb-go/internal/domain/analytics"
+	"github.com/sebihoermann/devdb-go/internal/domain/archive"
 	"github.com/sebihoermann/devdb-go/internal/domain/feedback"
 	"github.com/sebihoermann/devdb-go/internal/domain/planning"
 	"github.com/sebihoermann/devdb-go/internal/domain/status"
@@ -815,6 +817,28 @@ func cmdPlanItemShow(open opener) *cobra.Command {
 			}
 			item, acc, err := planning.ShowItem(ctx.DB, args[0])
 			if err != nil {
+				// The row may simply have been swept into archive_entries.
+				// Resolving that here turns "no match for id prefix" — which
+				// reads like a typo — into the truth plus the way back.
+				if archived, ok := archivedPlanItem(ctx.DB, args[0]); ok {
+					if ctx.Out.JSON {
+						return ctx.Out.PrintData(map[string]any{
+							"item": archived.Row, "acceptance": []any{}, "source": "archive",
+							"archive": archived,
+						})
+					}
+					lines := []string{
+						fmt.Sprintf("# %v [archived]", archived.Row["title"]),
+						fmt.Sprintf("status: %v · id: %s · source: archive", archived.Row["status"], archived.SourceID),
+						fmt.Sprintf("archived_at: %s", archived.ArchivedAt),
+					}
+					if archived.ArchiveReason != "" {
+						lines = append(lines, fmt.Sprintf("reason: %s", archived.ArchiveReason))
+					}
+					lines = append(lines, "",
+						fmt.Sprintf("restore with: devdb archive restore --source-id %s --table plan_items", archived.SourceID))
+					return ctx.Out.PrintData(output.HumanLines{Lines: lines})
+				}
 				return notFoundError(err.Error())
 			}
 			if ctx.Out.JSON {
@@ -850,6 +874,24 @@ func cmdPlanItemShow(open opener) *cobra.Command {
 			return ctx.Out.PrintData(output.HumanLines{Lines: lines})
 		},
 	}
+}
+
+// archivedPlanItem resolves an id prefix against archive_entries. It reports
+// ok=false when the id names no archived plan item, so the caller can keep the
+// original not-found error.
+func archivedPlanItem(db *sql.DB, idPrefix string) (archive.ShowResult, bool) {
+	if strings.TrimSpace(idPrefix) == "" {
+		return archive.ShowResult{}, false
+	}
+	ids, err := archive.ArchivedIDsByPrefix(db, "plan_items", idPrefix)
+	if err != nil || len(ids) == 0 {
+		return archive.ShowResult{}, false
+	}
+	res, err := archive.Show(db, "", "plan_items", ids[0])
+	if err != nil {
+		return archive.ShowResult{}, false
+	}
+	return res, true
 }
 
 func cmdPlanItemStart(open opener) *cobra.Command {
