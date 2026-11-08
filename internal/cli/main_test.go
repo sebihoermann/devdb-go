@@ -26,6 +26,15 @@ func TestMain(m *testing.M) {
 	if err := os.Setenv(analytics.EnvTelemetry, "off"); err != nil {
 		panic("cli tests: cannot disable telemetry: " + err.Error())
 	}
+	// Pin the model stamp too. The golden fixtures carry
+	// "model_id": "unknown", so an ambient DEVDB_MODEL_ID — set by an agent
+	// shell or a CI runner that exports it for real work — leaks into the
+	// fixture and fails two M13 golden tests for a reason that has nothing to
+	// do with the change under test. Same class of bug as the telemetry gate:
+	// a suite must not depend on the host it happens to run on.
+	if err := os.Unsetenv("DEVDB_MODEL_ID"); err != nil {
+		panic("cli tests: cannot unset DEVDB_MODEL_ID: " + err.Error())
+	}
 	os.Exit(m.Run())
 }
 
