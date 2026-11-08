@@ -48,24 +48,8 @@ type ReconcileResult struct {
 }
 
 func milestoneStatusFromChildren(q planQuerier, milestoneID string) (string, error) {
-	rows, err := q.Query(`
-		SELECT status, COUNT(*) FROM plan_items WHERE milestone_id=? GROUP BY status`, milestoneID)
+	counts, total, err := milestoneChildCounts(q, milestoneID)
 	if err != nil {
-		return "", err
-	}
-	defer rows.Close()
-	counts := map[string]int{}
-	total := 0
-	for rows.Next() {
-		var status string
-		var c int
-		if err := rows.Scan(&status, &c); err != nil {
-			return "", err
-		}
-		counts[status] = c
-		total += c
-	}
-	if err := rows.Err(); err != nil {
 		return "", err
 	}
 	if total == 0 {
@@ -92,6 +76,71 @@ func milestoneStatusFromChildren(q planQuerier, milestoneID string) (string, err
 		return "wontfix", nil
 	}
 	return "", nil
+}
+
+// milestoneChildCounts tallies this milestone's plan items, live plus archived.
+//
+// Live-only counting is why archive-to-completion could never reconcile: the
+// hygiene sweep moves a finished plan's items into archive_entries, the live
+// query then returns zero rows, and the milestone keeps its stale active status
+// with no children left to justify it. Archived items are counted back in so
+// "done" remains derivable after the sweep.
+func milestoneChildCounts(q planQuerier, milestoneID string) (map[string]int, int, error) {
+	counts := map[string]int{}
+	total := 0
+	liveIDs := map[string]bool{}
+
+	// One query, one open cursor: two concurrent reads on the same pooled
+	// connection deadlock.
+	rows, err := q.Query(`
+		SELECT id, status FROM plan_items WHERE milestone_id=?`, milestoneID)
+	if err != nil {
+		return nil, 0, err
+	}
+	for rows.Next() {
+		var id, status string
+		if err := rows.Scan(&id, &status); err != nil {
+			rows.Close()
+			return nil, 0, err
+		}
+		liveIDs[id] = true
+		counts[status]++
+		total++
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	// Merge archived children, skipping any whose source row is still live
+	// (possible with `archive restore --keep-archive`), so a row is never
+	// counted twice.
+	archRows, err := q.Query(`
+		SELECT source_id, json_extract(payload_json,'$.status')
+		FROM archive_entries
+		WHERE source_table='plan_items'
+		  AND json_extract(payload_json,'$.milestone_id')=?`, milestoneID)
+	if err != nil {
+		// No archive_entries table, or JSON1 unavailable: live counts stand.
+		return counts, total, nil
+	}
+	defer archRows.Close()
+	for archRows.Next() {
+		var sourceID sql.NullString
+		var status sql.NullString
+		if err := archRows.Scan(&sourceID, &status); err != nil {
+			continue
+		}
+		if !status.Valid || status.String == "" {
+			continue
+		}
+		if sourceID.Valid && liveIDs[sourceID.String] {
+			continue
+		}
+		counts[status.String]++
+		total++
+	}
+	return counts, total, archRows.Err()
 }
 
 func planStatusFromMilestones(q planQuerier, planID string) (string, error) {
