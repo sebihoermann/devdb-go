@@ -1,5 +1,10 @@
 # devdb-go Improvement Implementation Plans
 
+> **Historical record — executed 2026-06-19.** The verbs below are the pre-cutover
+> Python grammar and are **not registered** in the Go CLI. See
+> [docs/go-native-parity-matrix.md](docs/go-native-parity-matrix.md) for the current
+> mapping.
+
 > Concrete plans for the 7 improvement entries filed in `devdb-go/.devdb/development.db` as
 > `feedback … --category idea` on 2026-06-19. Ordered by recommended execution sequence.
 > Each plan includes: scope, files to touch, steps, verification, and effort estimate.

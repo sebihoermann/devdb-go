@@ -5,6 +5,11 @@
 > bracketed `[...]` placeholders, and adapt the step counts to your migration's actual surface area.
 >
 > Sections are numbered to match the originating plan; renumber as needed for your migration.
+>
+> **Historical record — executed 2026-06-19.** The verbs below are the pre-cutover
+> Python grammar and are **not registered** in the Go CLI. See
+> [docs/go-native-parity-matrix.md](docs/go-native-parity-matrix.md) for the current
+> mapping.
 
 ---
 

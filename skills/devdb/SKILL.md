@@ -492,6 +492,7 @@ Missed calls land in `missed_cli_calls` with `suggested_command` for the new gra
 ```bash
 devdb hub register /path/to/repo --alias myapp
 devdb hub register --auto --scope /path/to/parent    # walk + register every .devdb/development.db
+devdb hub register --auto --scope /path/to/parent --dry-run   # report what would register, write nothing
 devdb hub unregister <alias_or_path>                 # remove from hub (registry + metadata)
 devdb hub list
 devdb hub sync [--strict] [--json]
@@ -510,6 +511,8 @@ hub-snapshot parity. Eight sections: high feedback, high review
 findings, stale arch notes, overdue reminders, in-progress plan items,
 blocked, planned per project, stale verification. Replaces 30+ manual
 commands. Human output groups rows per project (group header carries the full count) and caps each group at 10 rows with an `...and K more` line; the global `--all` expands to uncapped. JSON output is always complete.
+
+`hub audit` and the hub snapshot count archived rows per project (`live=N archived=M`), so a project whose findings are mostly archived does not read as clean — the archived count is carried next to the live one rather than dropped.
 
 Federation queries (`hub across`) attach each project's `development.db` directly — they do not read copied hub rows.
 
@@ -562,7 +565,7 @@ devdb-openclaw doctor      --workspace <ws> --repo <repo>
 
 **Initialization:** `init`, `import python-db`
 
-**Planning:** `plan create|list|show|tree|status|scaffold|promote|reconcile|delete` · `plan milestone add|list|status` · `plan item add|list|show|start|pause|close|status` · `plan acceptance add|meet|backfill` · `plan file add`
+**Planning:** `plan create|list|show|tree|status|scaffold|promote|reconcile|delete` · `plan milestone add|list|status` · `plan item add|list|show|start|pause|close|status` · `plan acceptance add|list|meet|backfill` · `plan file add`
 
 **Memory:** `feedback add|list|show|close|annotate|severity|import` · `goal add|list|set|delete` · `feature add|list`
 
@@ -578,7 +581,7 @@ devdb-openclaw doctor      --workspace <ws> --repo <repo>
 
 **Hub:** `hub register|unregister|list|sync|dashboard|project|doctor|across`
 
-**Hygiene / analytics:** `archive run|list|restore|gc` · `analytics missed|summary` · `ledger housekeeping` (bundled archive + reconcile + scan + optional verify)
+**Hygiene / analytics:** `archive run|list|show|restore|gc` · `analytics missed|summary` · `ledger housekeeping` (bundled archive + reconcile + scan + optional verify)
 
 **Reads:** `status`, `quality`, `report`, `resume`, `doctor`, `help`, `list`, `show` · `plan status <slug-or-id>` is scoped per plan since 9347a13 (no-arg or `--global` = fleet aggregate; unknown ref exits non-zero)
 

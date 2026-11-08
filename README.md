@@ -44,6 +44,8 @@ devdb init
 devdb status
 devdb report
 devdb feedback add --role user "auth flow is confusing" --severity med
+devdb plan acceptance list --plan my-plan      # criteria for one plan
+devdb archive show <id>                        # read an archived row without restoring
 ```
 
 ## Command shape
@@ -53,6 +55,15 @@ devdb [--repo PATH] [--db PATH] [--json] [--all] [--verbose] <noun> <verb> [flag
 ```
 
 Top-level reads: `init`, `status`, `quality`, `report`, `resume`, `doctor`.
+
+Nouns: `plan` · `feedback` · `goal` · `feature` · `arch` · `review` · `verify` ·
+`task` · `approval` · `reminder` · `hub` · `archive` · `analytics` ·
+`inventory` · `ledger` · `import` · `list` · `show`
+
+Every noun takes `<verb>`; group commands take a further `<subverb>`
+(`plan acceptance meet`). Run `devdb <noun> --help` for the verbs it accepts,
+and `devdb help <noun> <verb> --examples` for real command shapes plus known
+gotchas.
 
 See [docs/go-native-parity-matrix.md](docs/go-native-parity-matrix.md) for the full command vocabulary and Python → Go mapping.
 
@@ -79,10 +90,32 @@ See [docs/go-native-schema-importer-mapping.md](docs/go-native-schema-importer-m
 ```bash
 devdb hub register /path/to/repo --alias myapp        # register one project
 devdb hub register --auto --scope /path/to/parent    # walk + register every .devdb/development.db
+devdb hub register --auto --scope /path/to/parent --dry-run   # report what would register, write nothing
 devdb hub unregister myapp                            # remove a project from the hub
+devdb hub sync                                        # refresh registered projects from the hub side
+devdb hub doctor                                      # explain each project's sync state and the next command
 ```
 
 `hub register --auto` skips `.git`, `node_modules`, and `vendor` directories.
+It is idempotent: an already-registered path is skipped, a derived alias that
+collides gets `-2`/`-3`, and an **explicit** alias that already points at a
+different root is an error rather than a silent repoint — an alias is an
+identity, so unregister the old owner or pick another name.
+
+## Hygiene
+
+```bash
+devdb archive gc --dry-run            # report stale open feedback + missing-file findings
+devdb archive gc                      # apply them (omit --dry-run to write)
+devdb archive run --yes               # move closed/resolved rows into archive_entries
+devdb archive show <id>               # read an archived row without restoring it
+devdb ledger housekeeping             # archive + reconcile + scan in one command
+```
+
+`archive gc` never closes high or critical severity unless you say otherwise:
+`--keep-severity` sets what it protects (default `high,critical`) and
+`--older-than` sets the age threshold (default 30 days). Its natural mode is
+preview, so it needs no `--yes` to run.
 
 ## Agent skill
 

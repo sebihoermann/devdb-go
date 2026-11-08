@@ -1,5 +1,10 @@
 # Migration Plan: Python devdb → Go devdb (`devdb-go`)
 
+> **Historical record — executed 2026-06-19.** The verbs below are the pre-cutover
+> Python grammar and are **not registered** in the Go CLI. See
+> [docs/go-native-parity-matrix.md](docs/go-native-parity-matrix.md) for the current
+> mapping.
+
 **Status:** ✅ Executed 2026-06-19
 **Snapshot date:** 2026-06-19
 **Source:** `/root/.openclaw/workspace/devdb` (Python) → `/root/.openclaw/workspace/projects/devdb-go` (Go)
