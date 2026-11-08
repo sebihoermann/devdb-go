@@ -20,6 +20,21 @@ jobs:
       - name: Run tests
         run: go test ./...
 
+      # Every devdb verb the docs name must resolve against the real command
+      # tree. The regression tests in internal/cli cover the resolution and
+      # tokenisation logic; this runs the lint itself over the whole repo, so
+      # a doc that names a dead verb fails CI rather than reaching a reader.
+      - name: Lint every devdb verb the docs name
+        run: python3 scripts/doc-verb-lint.py
+
+      # The command reference is generated from the cobra tree, so it cannot
+      # drift by construction — but only if a changed verb forces a
+      # regeneration. --check regenerates in memory and diffs, so adding a
+      # verb without re-running `go run ./cmd/gen-docs` fails here instead of
+      # shipping a stale reference.
+      - name: Command reference is up to date
+        run: go run ./cmd/gen-docs --check
+
       - name: Build binary
         run: |
           VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"

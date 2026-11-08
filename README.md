@@ -65,6 +65,12 @@ Every noun takes `<verb>`; group commands take a further `<subverb>`
 and `devdb help <noun> <verb> --examples` for real command shapes plus known
 gotchas.
 
+[docs/COMMANDS.md](docs/COMMANDS.md) is the full command reference — every
+verb, its flags and defaults, and its exit codes. It is generated from the
+command tree by `go run ./cmd/gen-docs`, so it cannot describe a verb the
+binary does not register; CI runs `gen-docs --check` and fails when a new verb
+lands without a regeneration.
+
 See [docs/go-native-parity-matrix.md](docs/go-native-parity-matrix.md) for the full command vocabulary and Python → Go mapping.
 
 ## Migrate from Python ledger

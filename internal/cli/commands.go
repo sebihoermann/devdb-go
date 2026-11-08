@@ -1191,6 +1191,25 @@ func exampleForCommand(key string) string {
 	return fmt.Sprintf("(no examples registered for %q; add one to examplesByCommand in internal/cli/commands.go)", key)
 }
 
+// ExampleForDocs returns the curated example block for a "noun verb" key, or ""
+// when none is registered. Exported for cmd/gen-docs, which embeds these into
+// the generated command reference so the reference carries the same gotchas
+// `devdb help --examples` prints.
+func ExampleForDocs(key string) string {
+	ex, ok := examplesByCommand[key]
+	if !ok {
+		return ""
+	}
+	return ex
+}
+
+// NewRootForDocs builds the command tree for doc generation. It is the same
+// tree Execute() runs, so the generated reference cannot describe commands the
+// binary does not register.
+func NewRootForDocs() *cobra.Command {
+	return newRoot()
+}
+
 func cmdHelp() *cobra.Command {
 	var examples bool
 	cmd := &cobra.Command{

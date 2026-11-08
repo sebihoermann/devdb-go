@@ -13,3 +13,9 @@ docs/brainstorm-*.md
 # Hermes plan artifacts (repo-local, not part of the product)
 .hermes/
 __pycache__/
+
+# Built binaries. `go build ./cmd/devdb` and ./cmd/devdb-openclaw land here when
+# someone builds from the repo root instead of `go install`, and the doc-verb
+# lint's regression tests build both — keep them out of git status.
+/devdb
+/devdb-openclaw

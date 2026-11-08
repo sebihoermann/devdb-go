@@ -18,17 +18,26 @@ Scope decisions (each one prevents a class of false positive):
 
 Usage:
     python3 scripts/doc-verb-lint.py [--bin PATH] [--root PATH]
+                                     [--openclaw-bin PATH]
                                      [--skip-path REL] ...
 
 Exit codes: 0 clean, 1 dead verbs found, 2 usage error.
+
+The OpenClaw adapter is resolved deterministically: --openclaw-bin wins,
+otherwise it is built from ./cmd/devdb-openclaw, and a sibling of --bin is
+the last resort. An unresolvable adapter is reported as a warning instead of
+being silently skipped, because a gate whose verdict depends on install
+layout cannot be trusted.
 """
 
 from __future__ import annotations
 
 import argparse
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 AVAILABLE = re.compile(r"^Available Commands:\s*$")
@@ -79,6 +88,70 @@ DEFAULT_SKIPS = {
 def run(binary: str, args: list[str]) -> str:
     proc = subprocess.run([binary, *args, "--help"], capture_output=True, text=True)
     return proc.stdout + proc.stderr
+
+
+def resolve_openclaw(
+    binaries: list[str], explicit: str | None, root: Path
+) -> tuple[list[str], str | None]:
+    """Return the binaries to walk plus a note explaining the adapter's origin.
+
+    The adapter used to be discovered as a *sibling* of the main binary and
+    appended only when it happened to exist. That made a dead verb decision
+    depend on install layout: the same docs passed or failed depending on
+    whether a `devdb-openclaw` file sat next to the binary under lint. A gate
+    whose verdict flips on directory contents is a gate nobody can trust, so
+    the adapter is now resolved in a deterministic order:
+
+      1. `--openclaw-bin PATH` — the operator's explicit answer, always used.
+      2. build it from ./cmd/devdb-openclaw into a temp dir — the repo is the
+         source of truth, so the lint always checks the adapter's real verbs.
+      3. a sibling next to the main binary — last resort, for environments
+         where Go is unavailable.
+
+    A path that cannot be used is reported rather than skipped, so an operator
+    who points at a stale binary hears about it instead of silently losing
+    adapter coverage.
+    """
+    if explicit:
+        if not Path(explicit).exists():
+            raise SystemExit(
+                f"error: --openclaw-bin {explicit} does not exist; the adapter "
+                "verbs in the docs would be silently unchecked"
+            )
+        return [*binaries, explicit], f"--openclaw-bin {explicit}"
+
+    built = build_openclaw(root)
+    if built:
+        return [*binaries, built], "built from ./cmd/devdb-openclaw"
+
+    sibling = Path(binaries[0]).with_name("devdb-openclaw")
+    if sibling.exists():
+        return [*binaries, str(sibling)], f"sibling {sibling}"
+
+    return binaries, "unresolved"
+
+
+def build_openclaw(root: Path) -> str | None:
+    """Build the adapter into a temp dir, or return None when Go is absent.
+
+    internal/cli/doc_verb_lint_test.go builds both binaries into temp dirs the
+    same way, so the repo suite and this script agree on what "the adapter"
+    means. Building is what makes the default invocation correct on a machine
+    that has neither binary installed.
+
+    The build runs with cwd=root so `./cmd/devdb-openclaw` resolves against
+    the repo the docs belong to, not the directory the lint was invoked from.
+    """
+    if shutil.which("go") is None:
+        return None
+    out = Path(tempfile.mkdtemp(prefix="doclint-openclaw-")) / "devdb-openclaw"
+    proc = subprocess.run(
+        ["go", "build", "-o", str(out), "./cmd/devdb-openclaw"],
+        capture_output=True,
+        text=True,
+        cwd=root,
+    )
+    return str(out) if proc.returncode == 0 and out.exists() else None
 
 
 def build_tree(binaries: list[str]) -> set[tuple[str, ...]]:
@@ -213,16 +286,21 @@ def main() -> int:
     ap.add_argument("--bin", action="append", default=[], help="devdb binary (repeatable)")
     ap.add_argument("--root", default=".")
     ap.add_argument("--skip-path", action="append", default=[])
+    ap.add_argument(
+        "--openclaw-bin",
+        default=None,
+        help="devdb-openclaw binary to walk (default: build it from ./cmd/devdb-openclaw)",
+    )
     args = ap.parse_args()
 
     root = Path(args.root).resolve()
     skips = DEFAULT_SKIPS | set(args.skip_path)
     binaries = args.bin or ["devdb"]
     # The OpenClaw adapter ships its own binary and the docs name its verbs, so
-    # walk it too when it is available next to the main one.
-    openclaw = Path(binaries[0]).with_name("devdb-openclaw")
-    if openclaw.exists():
-        binaries.append(str(openclaw))
+    # walk it too. Resolution is explicit (see resolve_openclaw) because a
+    # verdict that depends on where the binary happens to be installed cannot
+    # be trusted: the same docs used to pass or fail on sibling presence alone.
+    binaries, origin = resolve_openclaw(binaries, args.openclaw_bin, root)
 
     tree = build_tree(binaries)
     if not tree:
@@ -262,6 +340,13 @@ def main() -> int:
             print(f"  {d}")
         return 1
     print(f"ok: every devdb verb named in the docs resolves ({checked} invocations checked)")
+    if origin != "unresolved":
+        print(f"adapter verbs checked via: {origin}")
+    else:
+        print(
+            "warning: devdb-openclaw could not be resolved (no Go build, no "
+            "sibling, no --openclaw-bin); its verbs in the docs are unchecked"
+        )
     return 0
 
 
