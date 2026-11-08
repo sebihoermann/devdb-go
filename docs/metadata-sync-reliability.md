@@ -1,5 +1,10 @@
 # Metadata sync reliability
 
+> Grammar corrected 2026-11-08: `hub-sync` and `doctor-sync` were pre-cutover
+> flat verbs and are **not registered** in the Go CLI. The current commands are
+> `hub sync` and `hub doctor`. The remaining `hub-sync` strings below are the
+> cron filename and a log path, not commands.
+
 This document describes how devdb keeps the cross-project metadata hub current without relying on a single brittle background process.
 
 ## Reliability model
@@ -29,7 +34,7 @@ This is best-effort:
 
 ### 3) Periodic reconciliation
 
-`devdb hub-sync` refreshes registered projects from the hub side.
+`devdb hub sync` refreshes registered projects from the hub side.
 
 It can run:
 
@@ -60,7 +65,7 @@ That means stale data self-heals when the user asks for it.
 
 ### 5) Diagnosis
 
-`devdb doctor-sync` explains the current state of each registered project and recommends the next command.
+`devdb hub doctor` explains the current state of each registered project and recommends the next command.
 
 It is designed for questions like:
 
@@ -74,9 +79,9 @@ It is designed for questions like:
 Use the layered approach rather than a single daemon:
 
 1. **Always keep write-through and dirty state.** This is the correctness foundation.
-2. **Run `hub-sync` periodically.** This keeps the hub fresh even when nobody opens a project.
+2. **Run `hub sync` periodically.** This keeps the hub fresh even when nobody opens a project.
 3. **Let read-time repair clean up stragglers.** This reduces user-visible staleness.
-4. **Use `doctor-sync` when something looks wrong.** It tells you whether the issue is missing data, stale data, or a push error.
+4. **Use `hub doctor` when something looks wrong.** It tells you whether the issue is missing data, stale data, or a push error.
 
 A daemon is optional, not required. It can be useful as an accelerator, but the system should remain correct without it.
 
@@ -96,7 +101,7 @@ Run the reconciler as a simple oneshot timer or a long-lived watch loop:
 [Service]
 Type=simple
 WorkingDirectory=/path/to/repo
-ExecStart=/usr/local/bin/devdb hub-sync --watch --interval 60
+ExecStart=/usr/local/bin/devdb hub sync --watch --interval 60
 ```
 
 ### launchd
@@ -108,15 +113,15 @@ Use the same CLI command from a LaunchAgent or LaunchDaemon.
 For a periodic pull model, run a one-shot sync every few minutes:
 
 ```cron
-*/5 * * * * cd /path/to/repo && devdb hub-sync --json >> .devdb/hub-sync.log 2>&1
+*/5 * * * * cd /path/to/repo && devdb hub sync --json >> .devdb/hub-sync.log 2>&1
 ```
 
 ## Operational notes
 
-- If a source DB disappears, `doctor-sync` should report it as missing.
+- If a source DB disappears, `hub doctor` should report it as missing.
 - If a sync fails, the last error stays recorded in the source DB state.
 - If a write succeeds locally but hub refresh fails, the project is still correct; only the hub cache is stale.
-- If the hub is stale but the source is fresh, running `hub-sync` should reconcile them.
+- If the hub is stale but the source is fresh, running `hub sync` should reconcile them.
 
 ## Summary
 
