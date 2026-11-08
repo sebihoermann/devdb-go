@@ -112,14 +112,23 @@ type AuditReport struct {
 	// mostly-archived project read as empty, so every consumer that asks "how
 	// much is here" needs both halves.
 	ArchivedByProject map[string]map[string]int `json:"archived_by_project"`
+	// Unreadable lists the projects this audit could not open, keyed by alias
+	// with the reason. A project that fails to open used to be recorded with
+	// empty counts, which is indistinguishable from a project with nothing in
+	// it — so 8 unreadable ledgers under /root made live=432 read as a
+	// complete fleet total. This is the same silent-swallow that
+	// hub doctor --scan exposed for unregistered repos: an unreadable ledger
+	// is invisible debt, not clean data.
+	Unreadable map[string]string `json:"unreadable,omitempty"`
 }
 
 // Audit runs the cross-project audit and returns the report.
 //
 // Live mode opens each project's .devdb/development.db directly and
 // queries feedback / review_findings / architecture_notes / reminders /
-// plan_items / status_log / verification_runs. Corrupt, missing, or
-// legacy-Python databases are skipped silently, matching Across behaviour.
+// plan_items / status_log / verification_runs. A project that cannot be
+// opened is recorded in Unreadable with the reason, rather than being
+// recorded with empty counts that read as a clean ledger.
 //
 // Cached mode reads from ~/.devdb/metadata.db project_snapshots and
 // returns only counts (per-section rows are empty in cached mode
@@ -147,6 +156,7 @@ func Audit(opts AuditOptions) (AuditReport, error) {
 		Sections:          map[string]AuditSection{},
 		ByProject:         map[string]map[string]int{},
 		ArchivedByProject: map[string]map[string]int{},
+		Unreadable:        map[string]string{},
 	}
 	for _, kind := range auditSectionOrder {
 		report.Sections[kind] = AuditSection{Kind: kind, Rows: nil}
@@ -194,22 +204,26 @@ func auditLive(report *AuditReport, registryPath string, threshold int, include 
 		}
 		if !p.Exists {
 			ensureProjectCounts(report, p.Alias)
+			markUnreadable(report, p.Alias, "registered path does not exist")
 			continue
 		}
 		db, err := storage.Open(p.DBPath)
 		if err != nil {
 			ensureProjectCounts(report, p.Alias)
+			markUnreadable(report, p.Alias, err.Error())
 			continue
 		}
 		kind, _, err := storage.DetectSchema(db)
 		if err != nil || kind == storage.SchemaPython {
 			db.Close()
 			ensureProjectCounts(report, p.Alias)
+			markUnreadable(report, p.Alias, "not a Go-schema devdb ledger")
 			continue
 		}
 		if err := migrate.RunAll(db); err != nil {
 			db.Close()
 			ensureProjectCounts(report, p.Alias)
+			markUnreadable(report, p.Alias, "migration failed: "+err.Error())
 			continue
 		}
 		recordArchivedCounts(db, p.Alias, report)
@@ -528,6 +542,16 @@ func ensureProjectCounts(report *AuditReport, alias string) map[string]int {
 		report.ByProject[alias] = map[string]int{}
 	}
 	return report.ByProject[alias]
+}
+
+// markUnreadable records why a project contributed no data. Empty counts alone
+// cannot distinguish "nothing to report" from "could not look", and the second
+// case is the dangerous one.
+func markUnreadable(report *AuditReport, alias, reason string) {
+	if report.Unreadable == nil {
+		report.Unreadable = map[string]string{}
+	}
+	report.Unreadable[alias] = reason
 }
 
 func projectMatches(alias string, filter []string) bool {

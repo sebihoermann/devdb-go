@@ -543,6 +543,21 @@ func formatAuditArchived(report hub.AuditReport) []string {
 	for _, r := range rows {
 		out = append(out, fmt.Sprintf("  %-24s live=%d archived=%d", r.alias, r.live, r.archived))
 	}
+	// A total that silently omits the ledgers it could not open is a false
+	// clean. Name them so the reader knows the number is partial.
+	if len(report.Unreadable) > 0 {
+		out = append(out, "")
+		out = append(out, fmt.Sprintf("unreadable ledgers (%d) — excluded from every total above:",
+			len(report.Unreadable)))
+		aliases := make([]string, 0, len(report.Unreadable))
+		for alias := range report.Unreadable {
+			aliases = append(aliases, alias)
+		}
+		sort.Strings(aliases)
+		for _, alias := range aliases {
+			out = append(out, fmt.Sprintf("  %-24s %s", alias, report.Unreadable[alias]))
+		}
+	}
 	return out
 }
 
