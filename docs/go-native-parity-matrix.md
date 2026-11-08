@@ -1,7 +1,7 @@
 # Go Native Behavioral Parity Matrix
 
 Reference for answering **“is behavior X ported?”** during the Python → Go cutover.
-Snapshot: 2026-06-16. Source of truth for runtime behavior is `golang/`; this table tracks intent and gaps.
+Snapshot: 2026-11-08. Source of truth for runtime behavior is `internal/` (the tree is flat; there is no `golang/` directory); this table tracks intent and gaps.
 
 ## Classification key
 
@@ -58,6 +58,7 @@ Snapshot: 2026-06-16. Source of truth for runtime behavior is `golang/`; this ta
 | `set-status` (item) | `plan item status` | merge | done | Cannot bypass acceptance closure for `done` |
 | `add-acceptance` | `plan acceptance add` | merge | done | Auto-ordinal when omitted |
 | `meet-acceptance` | `plan acceptance meet` | merge | done | |
+| (N/A) | `plan acceptance list` | N/A | done | Read verb for criteria; `--plan`, `--plan-item`, `--open` |
 | `backfill-acceptance` | `plan acceptance backfill` | merge | done | Markdown spec or stdin |
 | `add-plan-file` | `plan file add` | merge | done | |
 | `show-plan` | `plan show` | merge | done | Slug or id |
@@ -162,6 +163,7 @@ Snapshot: 2026-06-16. Source of truth for runtime behavior is `golang/`; this ta
 | `archive` | `archive run` | merge | done | |
 | `restore-list` | `archive list` | merge | done | |
 | `restore` | `archive restore` | merge | done | |
+| (N/A) | `archive show` | N/A | done | Reads an archived row without restoring; `--table` + `--source-id`, or a bare archive id |
 | `list-missed-calls` | `analytics missed` | merge | done | |
 | `missed-calls-summary` | `analytics summary` | merge | done | |
 
@@ -187,7 +189,7 @@ Snapshot: 2026-06-16. Source of truth for runtime behavior is `golang/`; this ta
 | Python behavior | Go command | Class | Status | Notes |
 |-----------------|------------|-------|--------|-------|
 | (N/A) | `import python-db` | N/A | done | One-time migration; not a runtime compatibility layer |
-| Python `devdb` console script | Go binary in `golang/` | redesign | partial | M14 cutover: docs/skill still reference Python verbs |
+| Python `devdb` console script | Go binary in `cmd/devdb/` | redesign | done | M14 cutover complete 2026-06-19; the Python-era design docs were retired 2026-11-08 (skills/devdb/SPEC.md and features.md deleted) |
 
 ---
 
@@ -230,8 +232,8 @@ Snapshot: 2026-06-16. Source of truth for runtime behavior is `golang/`; this ta
 
 Human and JSON reference outputs for core reads and one write per domain live in:
 
-- `golang/internal/cli/testdata/golden/` — file-backed expected output
-- `golang/internal/cli/golden_test.go` — normalizes volatile ids/git before compare
+- `internal/cli/testdata/golden/` — file-backed expected output
+- `internal/cli/golden_test.go` — normalizes volatile ids/git before compare
 
 Commands covered: `status`, `report`, `resume`, `plan item start` (work-on equivalent), and domain write verbs.
 
@@ -241,8 +243,8 @@ Commands covered: `status`, `report`, `resume`, `plan item start` (work-on equiv
 
 | Artifact | Location | Reviewed |
 |----------|----------|----------|
-| Parity matrix (this file) | `docs/go-native-parity-matrix.md` | 2026-06-16 |
+| Parity matrix (this file) | `docs/go-native-parity-matrix.md` | 2026-11-08 |
 | Schema + importer mapping | `docs/go-native-schema-importer-mapping.md` | 2026-06-16 |
-| Golden fixtures | `golang/internal/cli/testdata/golden/` | 2026-06-16 |
+| Golden fixtures | `internal/cli/testdata/golden/` | 2026-11-08 |
 
 M1 exit criteria are satisfied retroactively: command grammar is frozen in the implementation plan HTML, behavioral parity is tabulated here, legacy features are classified, and golden examples enforce the output contract for primary agent entry points.

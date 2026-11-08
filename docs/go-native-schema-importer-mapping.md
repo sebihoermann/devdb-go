@@ -1,6 +1,6 @@
 # Go Native Schema and Importer Mapping
 
-One-time migration reference for `devdb import python-db`. Runtime schema is defined in `golang/internal/migrate/source.go` (project DB) and `golang/internal/migrate/hub.go` (metadata hub). Importer logic: `golang/internal/importer/python_ledger.go`.
+One-time migration reference for `devdb import python-db`. Runtime schema is defined in `internal/migrate/source.go` (project DB) and `internal/migrate/hub.go` (metadata hub). Importer logic: `internal/importer/python_ledger.go`.
 
 Snapshot: 2026-06-16.
 
@@ -92,7 +92,7 @@ Guards:
 
 `importer.CountParity` compares row counts for: `feedback`, `plan_items`, `goals`, `plans`, `repo_files`, `verification_runs`, `archive_entries`.
 
-Tests in `golang/internal/importer/python_ledger_test.go` assert count preservation on fixture databases.
+Tests in `internal/importer/python_ledger_test.go` assert count preservation on fixture databases.
 
 ---
 
