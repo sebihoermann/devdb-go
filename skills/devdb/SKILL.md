@@ -288,7 +288,7 @@ The closure ritual is non-negotiable. If you skip step 2 and jump straight to `p
 
 **If you forget the ritual:** the next agent's spot-check (or `devdb status --json` showing a done plan with open criteria) will catch it. Backfill by running `plan acceptance meet` with `--evidence <commit-sha>` against the original commit.
 
-**Run meets sequentially, not in parallel.** When ticking multiple acceptance criteria for one plan item, run `devdb plan acceptance meet` calls back-to-back from a single shell, not concurrently across shells or background processes. Parallel `meet` invocations from separate processes have been observed to surface `PRAGMA journal_mode = WAL: database is locked (SQLITE_BUSY)` even with `MaxOpenConns(1)` and the in-process retry budget, because the existing retry covers `PRAGMA` setup but not always the transaction commit window. See feedback `[bbec89e6]` and plan item `8e27044…` (auto-cascade) / `ef22d8c…` (`WithTx` retry extension) for the durable fixes; the sequential discipline is the in-the-meantime rule.
+**Meets may run in parallel.** `plan acceptance meet` writes inside `storage.WithTx`, so it gets the same bounded, jittered `SQLITE_BUSY` retry as every other write path: meeting eight criteria at once from separate processes is safe. There is no sequential-discipline rule any more — it was a workaround for `MeetAcceptance` running a bare `Exec` and is retired.
 
 ## Behavioral rules
 
@@ -509,7 +509,7 @@ Federation queries (`hub across`) attach each project's `development.db` directl
 
 **Initialization:** `init`, `import python-db`
 
-**Planning:** `plan create|list|show|tree|status|scaffold|promote|reconcile|delete` · `plan milestone add|list|status` · `plan item add|list|show|start|pause|close|status` · `plan acceptance add|meet|backfill` (run `meet` calls sequentially, not in parallel — see Closure ritual) · `plan file add`
+**Planning:** `plan create|list|show|tree|status|scaffold|promote|reconcile|delete` · `plan milestone add|list|status` · `plan item add|list|show|start|pause|close|status` · `plan acceptance add|meet|backfill` · `plan file add`
 
 **Memory:** `feedback add|list|show|close|annotate|severity|import` · `goal add|list|set|delete` · `feature add|list`
 

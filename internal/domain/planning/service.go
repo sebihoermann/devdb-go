@@ -363,9 +363,16 @@ func MeetAcceptance(db *sql.DB, accPrefix, evidence, modelID string) (string, er
 		return "", err
 	}
 	now := storage.NowUTC()
-	_, err = db.Exec(`
-		UPDATE plan_item_acceptance SET status='met', evidence=?, updated_at=?, model_id=?
-		WHERE id=?`, evidence, now, modelID, id)
+	// Route through WithTx so the write gets the same bounded, jittered
+	// SQLITE_BUSY retry as every other write path. A bare Exec here meant
+	// parallel meets failed on lock contention while sequential ones worked,
+	// which is why the skill used to demand they be run one at a time.
+	err = storage.WithTx(db, func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			UPDATE plan_item_acceptance SET status='met', evidence=?, updated_at=?, model_id=?
+			WHERE id=?`, evidence, now, modelID, id)
+		return err
+	})
 	return id, err
 }
 

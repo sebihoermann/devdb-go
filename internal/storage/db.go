@@ -54,6 +54,11 @@ func isBusyError(err error) bool {
 	return strings.Contains(msg, "sqlite_busy") || strings.Contains(msg, "database is locked")
 }
 
+// IsBusy reports whether err is a transient SQLite lock error. Exported so
+// callers and concurrency tests can assert that a failure was contention
+// rather than a real error.
+func IsBusy(err error) bool { return isBusyError(err) }
+
 // withBusyRetry runs fn with bounded exponential backoff when fn returns a
 // transient SQLite lock error. Other errors return immediately so callers
 // do not get silently retried constraint violations. After
