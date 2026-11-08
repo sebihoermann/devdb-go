@@ -133,6 +133,7 @@ Add an architecture note
 
 | Flag | Default | Description |
 |---|---|---|
+| `--allow-duplicate` | false | insert even when an equivalent entry already exists |
 | `--body` | — | note body (2-5 sentences) |
 | `--confidence` | medium | high\|medium\|low |
 | `--source` | [] | source file path (repeatable) |
@@ -333,6 +334,7 @@ Log feedback
 
 | Flag | Default | Description |
 |---|---|---|
+| `--allow-duplicate` | false | insert even when an equivalent entry already exists |
 | `--category` | — | feedback category |
 | `--context` | — | optional context |
 | `--role` | — | user\|model\|codebase |
@@ -461,6 +463,7 @@ Add a goal
 
 | Flag | Default | Description |
 |---|---|---|
+| `--allow-duplicate` | false | insert even when an equivalent entry already exists |
 | `--body` | — | goal body |
 | `--kind` | goal | goal\|do\|dont |
 
@@ -1130,6 +1133,7 @@ add TITLE
 
 | Flag | Default | Description |
 |---|---|---|
+| `--allow-duplicate` | false | insert even when an equivalent entry already exists |
 | `--body` | — | reminder body |
 | `--due` | — | due at ISO timestamp |
 | `--file` | — | tagged file path |
@@ -1199,6 +1203,7 @@ Add a finding to an open review run
 
 | Flag | Default | Description |
 |---|---|---|
+| `--allow-duplicate` | false | insert even when an equivalent entry already exists |
 | `--confidence` | — | low\|medium\|high |
 | `--effort` | — | trivial\|small\|med\|large |
 | `--file` | — | file path |
@@ -1323,6 +1328,7 @@ Add a task
 
 | Flag | Default | Description |
 |---|---|---|
+| `--allow-duplicate` | false | insert even when an equivalent entry already exists |
 | `--body` | — | task body |
 | `--due` | — | due date ISO |
 | `--priority` | med | low\|med\|high |

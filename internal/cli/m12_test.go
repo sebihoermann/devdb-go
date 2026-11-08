@@ -88,7 +88,7 @@ func TestM12ReminderListAll(t *testing.T) {
 	runDevdb(t, bin, "--db", dbPath, "init")
 
 	for i := 0; i < 35; i++ {
-		_, _, code := runDevdb(t, bin, "--db", dbPath, "reminder", "add", "r", "--due", "2026-12-31T00:00:00Z")
+		_, _, code := runDevdb(t, bin, "--db", dbPath, "reminder", "add", "r", "--due", "2026-12-31T00:00:00Z", "--allow-duplicate")
 		if code != 0 {
 			t.Fatalf("reminder add %d failed", i)
 		}
@@ -126,7 +126,7 @@ func TestM12ReportAllExpandsFeedback(t *testing.T) {
 	runDevdb(t, bin, "--db", dbPath, "init")
 
 	for i := 0; i < 8; i++ {
-		_, _, code := runDevdb(t, bin, "--db", dbPath, "feedback", "add", "--role", "user", "note")
+		_, _, code := runDevdb(t, bin, "--db", dbPath, "feedback", "add", "--role", "user", "note", "--allow-duplicate")
 		if code != 0 {
 			t.Fatalf("feedback add %d failed", i)
 		}

@@ -11,6 +11,7 @@ import (
 	"github.com/sebihoermann/devdb-go/internal/app"
 	"github.com/sebihoermann/devdb-go/internal/domain/analytics"
 	"github.com/sebihoermann/devdb-go/internal/domain/archive"
+	"github.com/sebihoermann/devdb-go/internal/domain/dedupe"
 	"github.com/sebihoermann/devdb-go/internal/domain/feedback"
 	"github.com/sebihoermann/devdb-go/internal/domain/planning"
 	"github.com/sebihoermann/devdb-go/internal/domain/status"
@@ -548,6 +549,7 @@ func cmdFeedbackSeverity(open opener) *cobra.Command {
 
 func cmdFeedbackAdd(open opener) *cobra.Command {
 	var role, category, severity, context string
+	var allowDuplicate bool
 	c := &cobra.Command{
 		Use:   "add NOTE",
 		Short: "Log feedback",
@@ -573,9 +575,16 @@ func cmdFeedbackAdd(open opener) *cobra.Command {
 			if err := validateEnum("severity", severity, []string{"info", "low", "med", "high", "critical"}); err != nil {
 				return err
 			}
+			note := strings.Join(args, " ")
+			if err := guardDuplicate(ctx, allowDuplicate, "feedback", dedupe.Query{
+				Table: "feedback", TextColumn: "note", Text: note,
+				Filters: []dedupe.Filter{{Column: "status", Value: "open"}},
+			}); err != nil {
+				return err
+			}
 			id, err := feedback.Add(ctx.DB, feedback.AddInput{
 				Role: role, Category: category, Severity: severity,
-				Note: strings.Join(args, " "), Context: context, ModelID: ctx.ModelID,
+				Note: note, Context: context, ModelID: ctx.ModelID,
 			})
 			if err != nil {
 				return err
@@ -587,6 +596,7 @@ func cmdFeedbackAdd(open opener) *cobra.Command {
 	c.Flags().StringVar(&category, "category", "", "feedback category")
 	c.Flags().StringVar(&severity, "severity", "", "info|low|med|high|critical")
 	c.Flags().StringVar(&context, "context", "", "optional context")
+	c.Flags().BoolVar(&allowDuplicate, "allow-duplicate", false, "insert even when an equivalent entry already exists")
 	return c
 }
 

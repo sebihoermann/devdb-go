@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/sebihoermann/devdb-go/internal/domain/architecture"
+	"github.com/sebihoermann/devdb-go/internal/domain/dedupe"
 	"github.com/sebihoermann/devdb-go/internal/domain/grasscutter"
 	"github.com/sebihoermann/devdb-go/internal/domain/inventory"
 	"github.com/sebihoermann/devdb-go/internal/git"
@@ -256,6 +257,7 @@ func cmdArch(open opener) *cobra.Command {
 func cmdArchAdd(open opener) *cobra.Command {
 	var body, confidence string
 	var sources []string
+	var allowDuplicate bool
 	c := &cobra.Command{
 		Use:   "add TOPIC",
 		Short: "Add an architecture note",
@@ -278,6 +280,15 @@ func cmdArchAdd(open opener) *cobra.Command {
 			if err := architecture.ValidateSourcePaths(ctx.DB, ctx.Project.RepoRoot, sources); err != nil {
 				return archSourcePathError(err)
 			}
+			if err := guardDuplicate(ctx, allowDuplicate, "architecture note", dedupe.Query{
+				Table: "architecture_notes", TextColumn: "body", Text: body,
+				Filters: []dedupe.Filter{
+					{Column: "status", Value: "active"},
+					{Column: "topic", Value: args[0]},
+				},
+			}); err != nil {
+				return err
+			}
 			id, err := architecture.Add(ctx.DB, args[0], body, sources, confidence, ctx.ModelID)
 			if err != nil {
 				if errors.Is(err, architecture.ErrInvalidTopic) {
@@ -291,6 +302,7 @@ func cmdArchAdd(open opener) *cobra.Command {
 	c.Flags().StringVar(&body, "body", "", "note body (2-5 sentences)")
 	c.Flags().StringSliceVar(&sources, "source", nil, "source file path (repeatable)")
 	c.Flags().StringVar(&confidence, "confidence", "medium", "high|medium|low")
+	c.Flags().BoolVar(&allowDuplicate, "allow-duplicate", false, "insert even when an equivalent entry already exists")
 	return c
 }
 

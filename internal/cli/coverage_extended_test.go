@@ -1190,6 +1190,11 @@ func TestInProcessMegaCoverage(t *testing.T) {
 		if len(args) >= 3 && args[0] == "plan" && args[1] == "create" {
 			jsonArgs = []string{"--json", "plan", "create", "Mega plan JSON", "--slug", "mega-plan-json"}
 		}
+		switch args[0] {
+		case "feedback", "goal", "task", "reminder", "arch":
+			// The human write above already inserted this row.
+			jsonArgs = append(jsonArgs, "--allow-duplicate")
+		}
 		e.run(jsonArgs...)
 	}
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/sebihoermann/devdb-go/internal/domain/approval"
 	"github.com/sebihoermann/devdb-go/internal/domain/catalog"
+	"github.com/sebihoermann/devdb-go/internal/domain/dedupe"
 	"github.com/sebihoermann/devdb-go/internal/domain/features"
 	"github.com/sebihoermann/devdb-go/internal/domain/feedback"
 	"github.com/sebihoermann/devdb-go/internal/domain/goals"
@@ -25,6 +26,7 @@ func cmdGoal(open opener) *cobra.Command {
 
 func cmdGoalAdd(open opener) *cobra.Command {
 	var kind, body string
+	var allowDuplicate bool
 	c := &cobra.Command{
 		Use:   "add TITLE",
 		Short: "Add a goal",
@@ -41,7 +43,17 @@ func cmdGoalAdd(open opener) *cobra.Command {
 			if kind == "" {
 				kind = "goal"
 			}
-			id, err := goals.Add(ctx.DB, kind, strings.Join(args, " "), body, ctx.ModelID)
+			title := strings.Join(args, " ")
+			if err := guardDuplicate(ctx, allowDuplicate, "goal", dedupe.Query{
+				Table: "goals", TextColumn: "title", Text: title,
+				Filters: []dedupe.Filter{
+					{Column: "status", Value: "active"},
+					{Column: "kind", Value: kind},
+				},
+			}); err != nil {
+				return err
+			}
+			id, err := goals.Add(ctx.DB, kind, title, body, ctx.ModelID)
 			if err != nil {
 				return err
 			}
@@ -50,6 +62,7 @@ func cmdGoalAdd(open opener) *cobra.Command {
 	}
 	c.Flags().StringVar(&kind, "kind", "goal", "goal|do|dont")
 	c.Flags().StringVar(&body, "body", "", "goal body")
+	c.Flags().BoolVar(&allowDuplicate, "allow-duplicate", false, "insert even when an equivalent entry already exists")
 	return c
 }
 
@@ -222,6 +235,7 @@ func cmdTask(open opener) *cobra.Command {
 
 func cmdTaskAdd(open opener) *cobra.Command {
 	var body, priority, due string
+	var allowDuplicate bool
 	c := &cobra.Command{
 		Use:   "add TITLE",
 		Short: "Add a task",
@@ -235,7 +249,14 @@ func cmdTaskAdd(open opener) *cobra.Command {
 			if err := ctx.RequireDB(); err != nil {
 				return err
 			}
-			id, err := tasks.Add(ctx.DB, strings.Join(args, " "), body, priority, due, ctx.ModelID)
+			title := strings.Join(args, " ")
+			if err := guardDuplicate(ctx, allowDuplicate, "task", dedupe.Query{
+				Table: "tasks", TextColumn: "title", Text: title,
+				Filters: []dedupe.Filter{{Column: "status", Value: "open"}},
+			}); err != nil {
+				return err
+			}
+			id, err := tasks.Add(ctx.DB, title, body, priority, due, ctx.ModelID)
 			if err != nil {
 				return err
 			}
@@ -245,6 +266,7 @@ func cmdTaskAdd(open opener) *cobra.Command {
 	c.Flags().StringVar(&body, "body", "", "task body")
 	c.Flags().StringVar(&priority, "priority", "med", "low|med|high")
 	c.Flags().StringVar(&due, "due", "", "due date ISO")
+	c.Flags().BoolVar(&allowDuplicate, "allow-duplicate", false, "insert even when an equivalent entry already exists")
 	return c
 }
 
@@ -529,6 +551,7 @@ func cmdReminder(open opener) *cobra.Command {
 
 func cmdReminderAdd(open opener) *cobra.Command {
 	var body, due, file, planItem string
+	var allowDuplicate bool
 	c := &cobra.Command{
 		Use:  "add TITLE",
 		Args: cobra.MinimumNArgs(1),
@@ -541,8 +564,15 @@ func cmdReminderAdd(open opener) *cobra.Command {
 			if err := ctx.RequireDB(); err != nil {
 				return err
 			}
+			title := strings.Join(args, " ")
+			if err := guardDuplicate(ctx, allowDuplicate, "reminder", dedupe.Query{
+				Table: "reminders", TextColumn: "title", Text: title,
+				Filters: []dedupe.Filter{{Column: "status", Value: "open"}},
+			}); err != nil {
+				return err
+			}
 			id, err := reminders.Add(ctx.DB, reminders.AddInput{
-				Title: strings.Join(args, " "), Body: body, DueAt: due,
+				Title: title, Body: body, DueAt: due,
 				FilePath: file, PlanItemID: planItem, ModelID: ctx.ModelID,
 			})
 			if err != nil {
@@ -555,6 +585,7 @@ func cmdReminderAdd(open opener) *cobra.Command {
 	c.Flags().StringVar(&due, "due", "", "due at ISO timestamp")
 	c.Flags().StringVar(&file, "file", "", "tagged file path")
 	c.Flags().StringVar(&planItem, "plan-item", "", "linked plan item id")
+	c.Flags().BoolVar(&allowDuplicate, "allow-duplicate", false, "insert even when an equivalent entry already exists")
 	return c
 }
 

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/sebihoermann/devdb-go/internal/app"
+	"github.com/sebihoermann/devdb-go/internal/domain/dedupe"
 	"github.com/sebihoermann/devdb-go/internal/domain/review"
 	"github.com/sebihoermann/devdb-go/internal/domain/verification"
 	"github.com/sebihoermann/devdb-go/internal/git"
@@ -74,6 +75,7 @@ func cmdReviewFinding(open opener) *cobra.Command {
 		severity, confidence, effort                      string
 		lineStart, lineEnd                                int
 		hasLineStart, hasLineEnd                          bool
+		allowDuplicate                                    bool
 	)
 	c := &cobra.Command{
 		Use:   "finding",
@@ -110,6 +112,16 @@ func cmdReviewFinding(open opener) *cobra.Command {
 			if hasLineEnd {
 				in.LineEnd = &lineEnd
 			}
+			if err := guardDuplicate(ctx, allowDuplicate, "review finding", dedupe.Query{
+				Table: "review_findings", TextColumn: "title", Text: title,
+				Filters: []dedupe.Filter{
+					{Column: "status", Value: "open"},
+					{Column: "principle", Value: principle},
+					{Column: "file_path", Value: filePath},
+				},
+			}); err != nil {
+				return err
+			}
 			id, err := review.AddFinding(ctx.DB, runID, in, ctx.ModelID)
 			if errors.Is(err, review.ErrRunNotFound) {
 				return notFoundError("run not found")
@@ -136,6 +148,7 @@ func cmdReviewFinding(open opener) *cobra.Command {
 	c.Flags().StringVar(&severity, "severity", "", "info|low|med|high|critical")
 	c.Flags().StringVar(&confidence, "confidence", "", "low|medium|high")
 	c.Flags().StringVar(&effort, "effort", "", "trivial|small|med|large")
+	c.Flags().BoolVar(&allowDuplicate, "allow-duplicate", false, "insert even when an equivalent entry already exists")
 	c.PreRunE = func(cmd *cobra.Command, args []string) error {
 		if cmd.Flags().Changed("line-start") {
 			hasLineStart = true

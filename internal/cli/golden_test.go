@@ -263,6 +263,12 @@ func TestM13GoldenWrites(t *testing.T) {
 				// Human test already created the slug; use a distinct slug for JSON golden.
 				jsonArgs = []string{"--json", "plan", "create", "Golden plan JSON", "--slug", "golden-write-plan-json"}
 			}
+			switch tc.name {
+			case "feedback", "goal", "task", "reminder", "arch":
+				// The human subtest already inserted this row; exercise the
+				// duplicate override so the JSON shape can be checked too.
+				jsonArgs = append(jsonArgs, "--allow-duplicate")
+			}
 			stdout, stderr, code := runCLI(t, append(base, jsonArgs...)...)
 			if code != 0 {
 				t.Fatalf("exit %d stderr=%s stdout=%s", code, stderr, stdout)
