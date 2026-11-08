@@ -109,6 +109,11 @@ func validateEnum(flagName, value string, allowed []string) error {
 	return usageError(fmt.Sprintf("--%s: invalid value %q (allowed: %s)", flagName, value, strings.Join(allowed, ", ")))
 }
 
+// Version is the build version reported by --version. It defaults to "dev" for
+// a plain `go build`; release builds inject it with
+// -ldflags "-X .../internal/cli.Version=<version>".
+var Version = "dev"
+
 func newRoot() *cobra.Command {
 	var jsonOut bool
 
@@ -116,6 +121,7 @@ func newRoot() *cobra.Command {
 		Use:           "devdb",
 		Short:         "Queryable per-project memory for codebases",
 		Long:          "Queryable per-project memory for codebases. Use 'devdb help <command> --examples' to see real command shapes and known gotchas for any verb.",
+		Version:       Version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
@@ -516,6 +522,15 @@ func cmdFeedbackAdd(open opener) *cobra.Command {
 			if role == "" {
 				return usageError("--role is required (user|model|codebase)")
 			}
+			// Validate before the insert so a typo is a usage error naming the
+			// allowed values, rather than a raw CHECK constraint failure leaking
+			// out of sqlite with exit code 1.
+			if err := validateEnum("role", role, []string{"user", "model", "codebase"}); err != nil {
+				return err
+			}
+			if err := validateEnum("severity", severity, []string{"info", "low", "med", "high", "critical"}); err != nil {
+				return err
+			}
 			id, err := feedback.Add(ctx.DB, feedback.AddInput{
 				Role: role, Category: category, Severity: severity,
 				Note: strings.Join(args, " "), Context: context, ModelID: ctx.ModelID,
@@ -553,6 +568,9 @@ func cmdFeedbackList(open opener) *cobra.Command {
 			rows, err := feedback.List(ctx.DB, st, effectiveListLimit(20))
 			if err != nil {
 				return err
+			}
+			if !ctx.Out.JSON && len(rows) == 0 {
+				return ctx.Out.PrintData(output.EmptyText("no feedback"))
 			}
 			return ctx.Out.PrintData(rows)
 		},
@@ -677,6 +695,9 @@ func cmdPlanList(open opener) *cobra.Command {
 			plans, err := planning.ListPlans(ctx.DB)
 			if err != nil {
 				return err
+			}
+			if !ctx.Out.JSON && len(plans) == 0 {
+				return ctx.Out.PrintData(output.EmptyText("no plans"))
 			}
 			return ctx.Out.PrintData(plans)
 		},

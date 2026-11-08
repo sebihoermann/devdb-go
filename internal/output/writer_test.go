@@ -155,6 +155,38 @@ func TestPrintDataHumanEmptySlicePrintsEmptyArray(t *testing.T) {
 	}
 }
 
+// TestEmptyTextHumanPrintsPhrase covers the empty-list phrasing helper: a
+// human-mode list says "no feedback" instead of an empty line or a bare [].
+// The writer's own empty-slice behaviour is unchanged (see
+// TestPrintDataHumanEmptySlicePrintsEmptyArray) — EmptyText is an explicit
+// opt-in from the command layer, so the stable JSON-ish shape stays the
+// default for anything that does not ask for a phrase.
+func TestEmptyTextHumanPrintsPhrase(t *testing.T) {
+	var out bytes.Buffer
+	w := &Writer{JSON: false, Stdout: &out}
+	if err := w.PrintData(EmptyText("no feedback")); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(out.String()); got != "no feedback" {
+		t.Fatalf("stdout = %q, want %q", got, "no feedback")
+	}
+}
+
+// TestEmptyTextJSONStaysEmptyArray guards the machine contract: even if a
+// command hands EmptyText to the writer, --json must still emit [] so an
+// agent iterating a list never receives prose. This holds by construction
+// via HumanLines.MarshalJSON, not by every caller remembering to branch.
+func TestEmptyTextJSONStaysEmptyArray(t *testing.T) {
+	var out bytes.Buffer
+	w := &Writer{JSON: true, Stdout: &out}
+	if err := w.PrintData(EmptyText("no feedback")); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(out.String()); got != "[]" {
+		t.Fatalf("stdout = %q, want []", got)
+	}
+}
+
 // TestStableJSONValuePassThrough covers the non-slice paths so the helper
 // does not accidentally rewrite scalars, maps, or structs.
 func TestStableJSONValuePassThrough(t *testing.T) {

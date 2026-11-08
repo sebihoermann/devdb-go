@@ -74,6 +74,9 @@ func cmdGoalList(open opener) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if !ctx.Out.JSON && len(rows) == 0 {
+				return ctx.Out.PrintData(output.EmptyText("no goals"))
+			}
 			return ctx.Out.PrintData(rows)
 		},
 	}
@@ -180,6 +183,9 @@ func cmdFeatureList(open opener) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if !ctx.Out.JSON && len(rows) == 0 {
+				return ctx.Out.PrintData(output.EmptyText("no features"))
+			}
 			return ctx.Out.PrintData(rows)
 		},
 	}
@@ -262,6 +268,9 @@ func cmdTaskList(open opener) *cobra.Command {
 			rows, err := tasks.List(ctx.DB, st, priority, effectiveListLimit(30))
 			if err != nil {
 				return err
+			}
+			if !ctx.Out.JSON && len(rows) == 0 {
+				return ctx.Out.PrintData(output.EmptyText("no tasks"))
 			}
 			return ctx.Out.PrintData(rows)
 		},
@@ -481,6 +490,9 @@ func cmdApprovalList(open opener) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if !ctx.Out.JSON && len(rows) == 0 {
+				return ctx.Out.PrintData(output.EmptyText("no pending approvals"))
+			}
 			return ctx.Out.PrintData(rows)
 		},
 	}
@@ -566,6 +578,9 @@ func cmdReminderList(open opener) *cobra.Command {
 			rows, err := reminders.List(ctx.DB, st, overdue, effectiveListLimit(30))
 			if err != nil {
 				return err
+			}
+			if !ctx.Out.JSON && len(rows) == 0 {
+				return ctx.Out.PrintData(output.EmptyText("no reminders"))
 			}
 			return ctx.Out.PrintData(rows)
 		},

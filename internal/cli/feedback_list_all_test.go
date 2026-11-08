@@ -46,21 +46,38 @@ func TestFeedbackListStatusAllReturnsEveryStatus(t *testing.T) {
 // finding: with the default (non---json) output, an empty list printed
 // "null" while the --json path printed "[]". An empty result and a filter
 // that matched nothing must not look the same to a caller.
+//
+// The human branch now prints a phrase ("no feedback") rather than "[]":
+// "[]" is JSON leaking into the human view, and the phrase is what the
+// improvements plan asks a human-mode list to say. The contract this test
+// actually protects is unchanged — human output must never be the bare
+// null/[] that made an empty result and an unmatched filter
+// indistinguishable — so the assertion is on the phrase, and the JSON
+// branch is asserted separately to still be exactly [].
 func TestEmptyListPrintsEmptyArrayInHumanMode(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "development.db")
 	runCLIOut(t, "--db", dbPath, "init")
 
 	out := strings.TrimSpace(runCLIOut(t, "--db", dbPath, "feedback", "list", "--status", "open"))
-	if out != "[]" {
-		t.Fatalf("empty feedback list = %q, want []", out)
+	if out == "" || out == "null" || out == "[]" {
+		t.Fatalf("empty feedback list (human) = %q, want a human phrase", out)
+	}
+	if !strings.Contains(out, "no feedback") {
+		t.Fatalf("empty feedback list (human) = %q, want it to say %q", out, "no feedback")
+	}
+
+	// The machine branch keeps the stable empty-array shape.
+	jsonOut := strings.TrimSpace(runCLIOut(t, "--db", dbPath, "feedback", "list", "--status", "open", "--json"))
+	if jsonOut != "[]" {
+		t.Fatalf("empty feedback list --json = %q, want []", jsonOut)
 	}
 	var rows []map[string]any
-	if err := json.Unmarshal([]byte(out), &rows); err != nil {
-		t.Fatalf("empty feedback list is not valid JSON: %v", err)
+	if err := json.Unmarshal([]byte(jsonOut), &rows); err != nil {
+		t.Fatalf("empty feedback list --json is not valid JSON: %v", err)
 	}
 	if len(rows) != 0 {
-		t.Fatalf("empty feedback list decoded to %d rows", len(rows))
+		t.Fatalf("empty feedback list --json decoded to %d rows", len(rows))
 	}
 }
 

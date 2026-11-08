@@ -21,4 +21,19 @@ jobs:
         run: go test ./...
 
       - name: Build binary
-        run: go build -o devdb ./cmd/devdb
+        run: |
+          VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
+          go build -ldflags "-X github.com/sebihoermann/devdb-go/internal/cli.Version=${VERSION}" -o devdb ./cmd/devdb
+
+      # Prove the release path end to end: a binary built with an injected
+      # version must report it, so `--version` can never ship a stale "dev"
+      # literal that only survives because nobody checked.
+      - name: Verify --version reports the injected version
+        run: |
+          out="$(./devdb --version)"
+          echo "$out"
+          case "$out" in
+            "devdb version dev") echo "version was not injected"; exit 1 ;;
+            "devdb version "?*) echo "ok" ;;
+            *) echo "unexpected --version output"; exit 1 ;;
+          esac

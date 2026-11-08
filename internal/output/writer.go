@@ -103,3 +103,23 @@ func (w *Writer) Hint(format string, args ...any) {
 type HumanLines struct {
 	Lines []string
 }
+
+// MarshalJSON keeps HumanLines out of machine output. HumanLines is human
+// prose ("no findings", "3 plans"), not a data shape: without this, --json
+// emitted {"Lines": ["no findings"]}, so an agent iterating a list got an
+// object instead of an array. It marshals as [] — an empty list is the
+// honest machine reading of "there are no rows to report".
+func (h HumanLines) MarshalJSON() ([]byte, error) {
+	return []byte("[]"), nil
+}
+
+// EmptyText returns a HumanLines carrying a single phrase for an empty result,
+// so a human-mode list says "no feedback" instead of printing an empty line.
+//
+// JSON mode is unaffected by construction: HumanLines marshals as [], so a
+// command can call EmptyText on either branch and still emit a valid empty
+// array. Callers should still guard on !ctx.Out.JSON where they want to skip
+// building the phrase at all.
+func EmptyText(phrase string) HumanLines {
+	return HumanLines{Lines: []string{phrase}}
+}
