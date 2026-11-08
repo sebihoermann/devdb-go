@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/sebihoermann/devdb-go/internal/domain/architecture"
+	"github.com/sebihoermann/devdb-go/internal/domain/archive"
 	"github.com/sebihoermann/devdb-go/internal/migrate"
 	"github.com/sebihoermann/devdb-go/internal/storage"
 )
@@ -106,6 +107,11 @@ type AuditReport struct {
 	SeverityThreshold string                    `json:"severity_threshold"`
 	Sections          map[string]AuditSection   `json:"sections"`
 	ByProject         map[string]map[string]int `json:"by_project"`
+	// ArchivedByProject carries archived row counts per project, keyed by
+	// alias then source_table, plus a "total" entry. Live counts alone made a
+	// mostly-archived project read as empty, so every consumer that asks "how
+	// much is here" needs both halves.
+	ArchivedByProject map[string]map[string]int `json:"archived_by_project"`
 }
 
 // Audit runs the cross-project audit and returns the report.
@@ -140,6 +146,7 @@ func Audit(opts AuditOptions) (AuditReport, error) {
 		SeverityThreshold: opts.Severity,
 		Sections:          map[string]AuditSection{},
 		ByProject:         map[string]map[string]int{},
+		ArchivedByProject: map[string]map[string]int{},
 	}
 	for _, kind := range auditSectionOrder {
 		report.Sections[kind] = AuditSection{Kind: kind, Rows: nil}
@@ -205,6 +212,7 @@ func auditLive(report *AuditReport, registryPath string, threshold int, include 
 			ensureProjectCounts(report, p.Alias)
 			continue
 		}
+		recordArchivedCounts(db, p.Alias, report)
 		auditOneProject(db, p.Alias, report, threshold, include)
 		db.Close()
 	}
@@ -238,6 +246,17 @@ func mergeSnapshotIntoReport(report *AuditReport, alias string, s Snapshot, thre
 	counts["in_progress"] = s.InProgressItems
 	counts["stale_arch"] = s.StaleArchNotes
 	counts["overdue_reminders"] = s.OverdueReminders
+	// Cached mode must report the same archived total as live mode, or
+	// --cached silently reports a different picture of the same ledger.
+	if report.ArchivedByProject[alias] == nil {
+		report.ArchivedByProject[alias] = map[string]int{}
+	}
+	report.ArchivedByProject[alias]["total"] = s.ArchivedCount
+	// Cached mode must show a live number too, or every project reads as
+	// empty live and the split looks like total data loss.
+	if counts["live_total"] == 0 {
+		counts["live_total"] = s.LiveCount
+	}
 	if s.LatestVerificationFreshness != "" && s.LatestVerificationFreshness != "fresh" && s.LatestVerificationStatus == "passed" {
 		if include("stale_verification") {
 			appendSectionRow(report, "stale_verification", map[string]any{
@@ -464,6 +483,44 @@ func auditOneProject(db *sql.DB, alias string, report *AuditReport, threshold in
 			})
 		}
 	}
+}
+
+// recordArchivedCounts fills ArchivedByProject for one project. A ledger whose
+// archive_entries table is missing or unreadable contributes zeros, never a
+// skipped project: a consumer comparing live and archived must see both keys.
+func recordArchivedCounts(db *sql.DB, alias string, report *AuditReport) {
+	archived := ensureArchivedCounts(report, alias)
+	live := ensureProjectCounts(report, alias)
+	tc, err := archive.UnionCounts(db)
+	if err != nil {
+		return
+	}
+	archived["total"] = tc.Total
+	for table, n := range tc.BySource {
+		archived[table] = n
+	}
+
+	// Live counts come from the same table list so live=N archived=M compares
+	// like with like. Existing keys (open_high_feedback, in_progress, ...) are
+	// section counters and must not be overwritten by a raw row count.
+	lc, err := archive.LiveCounts(db)
+	if err != nil {
+		return
+	}
+	live["live_total"] = lc.Total
+	for table, n := range lc.BySource {
+		key := "live_" + table
+		if _, taken := live[key]; !taken {
+			live[key] = n
+		}
+	}
+}
+
+func ensureArchivedCounts(report *AuditReport, alias string) map[string]int {
+	if report.ArchivedByProject[alias] == nil {
+		report.ArchivedByProject[alias] = map[string]int{}
+	}
+	return report.ArchivedByProject[alias]
 }
 
 func ensureProjectCounts(report *AuditReport, alias string) map[string]int {

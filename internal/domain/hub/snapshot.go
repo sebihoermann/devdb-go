@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sebihoermann/devdb-go/internal/domain/archive"
 	"github.com/sebihoermann/devdb-go/internal/domain/planning"
 	"github.com/sebihoermann/devdb-go/internal/domain/status"
 	"github.com/sebihoermann/devdb-go/internal/domain/verification"
@@ -51,6 +52,11 @@ type Snapshot struct {
 	OpenHighFindings int `json:"open_high_findings"`
 	MissedCalls7d    int `json:"missed_calls_7d"`
 	OverdueReminders int `json:"overdue_reminders"`
+	// ArchivedCount is the number of archived rows at snapshot time, so
+	// cached reads report the same live/archived split as live reads.
+	ArchivedCount int `json:"archived_count"`
+	// LiveCount is the same for live rows across the archivable tables.
+	LiveCount int `json:"live_count"`
 
 	LatestVerificationStatus    string `json:"latest_verification_status,omitempty"`
 	LatestVerificationFreshness string `json:"latest_verification_freshness,omitempty"`
@@ -145,6 +151,15 @@ func CollectSnapshot(root, dbPath string) Snapshot {
 	_ = db.QueryRow(`
 		SELECT COUNT(*) FROM reminders
 		WHERE status='open' AND due_at IS NOT NULL AND due_at < datetime('now')`).Scan(&snap.OverdueReminders)
+
+	// Archived rows are most of the data in a mature ledger. Cached reads use
+	// this to report the same live/archived split as a live read.
+	if tc, err := archive.UnionCounts(db); err == nil {
+		snap.ArchivedCount = tc.Total
+	}
+	if lc, err := archive.LiveCounts(db); err == nil {
+		snap.LiveCount = lc.Total
+	}
 
 	var scanFinished sql.NullString
 	var filesSeen, filesChanged sql.NullInt64

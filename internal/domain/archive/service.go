@@ -486,6 +486,86 @@ func archiveLocSnapshots(db *sql.DB, archivedAt, reason string, keep int) (int, 
 	return bundled, snapRows.Err()
 }
 
+// TableCounts is a per-source_table count of archived rows.
+type TableCounts struct {
+	// Total is every archived row regardless of source table.
+	Total int `json:"total"`
+	// BySource maps source_table to its archived row count.
+	BySource map[string]int `json:"by_source"`
+}
+
+// CountBySource returns the archived row count for one source table.
+func (c TableCounts) CountBySource(table string) int { return c.BySource[table] }
+
+// UnionCounts returns how many rows are archived in this ledger, broken down by
+// the table they came from, in a single query.
+//
+// Archive is the bulk of the data in a long-lived ledger (one project held 3477
+// archived rows against 84 live ones), so any reader that counts live tables
+// alone reports a mostly-archived project as empty or clean. This is the single
+// call such readers make instead of re-deriving the archive join each time.
+func UnionCounts(db *sql.DB) (TableCounts, error) {
+	out := TableCounts{BySource: map[string]int{}}
+	rows, err := db.Query(`
+		SELECT source_table, COUNT(*)
+		FROM archive_entries
+		GROUP BY source_table
+		ORDER BY source_table`)
+	if err != nil {
+		// A ledger predating the archive feature has no archive_entries table.
+		// The question is "how much is archived", and the answer is none.
+		if strings.Contains(err.Error(), "no such table") {
+			return out, nil
+		}
+		return out, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var source string
+		var n int
+		if err := rows.Scan(&source, &n); err != nil {
+			return out, err
+		}
+		out.BySource[source] = n
+		out.Total += n
+	}
+	return out, rows.Err()
+}
+
+// CountedTables is the set of tables the archive sweep can move rows out of.
+// Live and archived counts are reported over this same set so the two halves
+// of a "live=N archived=M" line always describe the same tables.
+var CountedTables = []string{
+	"feedback", "review_findings", "review_runs", "features",
+	"status_log", "plan_items", "reminders", "tasks",
+}
+
+// LiveCounts returns the current row count of each archivable table.
+//
+// Paired with UnionCounts this answers "how much is here, and how much has been
+// moved out" without a reader having to know the table list or guess whether a
+// given table is archivable. A table that does not exist counts as 0.
+func LiveCounts(db *sql.DB) (TableCounts, error) {
+	out := TableCounts{BySource: map[string]int{}}
+	for _, table := range CountedTables {
+		exists, err := storage.TableExists(db, table)
+		if err != nil {
+			return out, err
+		}
+		if !exists {
+			out.BySource[table] = 0
+			continue
+		}
+		var n int
+		if err := db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", table)).Scan(&n); err != nil {
+			return out, err
+		}
+		out.BySource[table] = n
+		out.Total += n
+	}
+	return out, nil
+}
+
 // Entry is a row in archive_entries.
 type Entry struct {
 	ID            string `json:"id"`

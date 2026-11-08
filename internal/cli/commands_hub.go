@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -487,7 +488,64 @@ func formatAudit(report hub.AuditReport, limit int) []string {
 		lines = append(lines, formatAuditSection(kind, sec.Rows, limit)...)
 		lines = append(lines, "")
 	}
+	if arch := formatAuditArchived(report); len(arch) > 0 {
+		lines = append(lines, arch...)
+	}
 	return lines
+}
+
+// formatAuditArchived renders the live-vs-archived row count per project.
+//
+// Without it a project whose ledger is mostly archived (3477 archived against
+// 84 live in the largest one) read as clean because every section counts live
+// rows only. Sorted largest-archive-first so the projects that need this
+// context most are at the top.
+func formatAuditArchived(report hub.AuditReport) []string {
+	if len(report.ArchivedByProject) == 0 {
+		return nil
+	}
+	type row struct {
+		alias    string
+		live     int
+		archived int
+	}
+	rows := make([]row, 0, len(report.ArchivedByProject))
+	for alias, counts := range report.ArchivedByProject {
+		archived := counts["total"]
+		live := 0
+		if lc, ok := report.ByProject[alias]; ok {
+			live = lc["live_total"]
+		}
+		rows = append(rows, row{alias: alias, live: live, archived: archived})
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].archived != rows[j].archived {
+			return rows[i].archived > rows[j].archived
+		}
+		return rows[i].alias < rows[j].alias
+	})
+	out := []string{fmt.Sprintf("retained rows (live=%d archived=%d)",
+		totalLive(report), totalArchived(report))}
+	for _, r := range rows {
+		out = append(out, fmt.Sprintf("  %-24s live=%d archived=%d", r.alias, r.live, r.archived))
+	}
+	return out
+}
+
+func totalLive(report hub.AuditReport) int {
+	total := 0
+	for _, c := range report.ByProject {
+		total += c["live_total"]
+	}
+	return total
+}
+
+func totalArchived(report hub.AuditReport) int {
+	total := 0
+	for _, c := range report.ArchivedByProject {
+		total += c["total"]
+	}
+	return total
 }
 
 // formatAuditSection renders one audit section grouped per project with a
