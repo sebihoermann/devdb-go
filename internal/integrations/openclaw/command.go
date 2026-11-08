@@ -58,7 +58,7 @@ func NewCommand() *cobra.Command {
 	root.PersistentFlags().StringVar(&opts.workspace, "workspace", "", "OpenClaw workspace root")
 	root.PersistentFlags().StringVar(&opts.repo, "repo", "", "target repository containing .devdb")
 	root.PersistentFlags().BoolVar(&opts.json, "json", false, "machine-readable JSON output")
-	root.AddCommand(newVersionCommand(), newListCommand(&opts), newLinksCommand(&opts), newSyncCommand(&opts), newFrictionCommand(&opts), newDoctorCommand(&opts), newScheduleCommand(&opts))
+	root.AddCommand(newVersionCommand(), newListCommand(&opts), newLinksCommand(&opts), newSyncCommand(&opts), newFrictionCommand(&opts), newDoctorCommand(&opts))
 	return root
 }
 

@@ -24,10 +24,24 @@ type FrictionResult struct {
 	Hits         int `json:"hits"`
 	Created      int `json:"created"`
 	Skipped      int `json:"skipped"`
+	// Proposed lists the rows a dry run would create, so the preview can be
+	// reviewed before anything is written.
+	Proposed []ProposedFeedback `json:"proposed,omitempty"`
+	DryRun   bool               `json:"dry_run,omitempty"`
+}
+
+// ProposedFeedback is one feedback row a scan would insert.
+type ProposedFeedback struct {
+	Note     string `json:"note"`
+	Context  string `json:"context"`
+	Role     string `json:"role"`
+	Category string `json:"category"`
+	Severity string `json:"severity"`
 }
 
 // ScanFriction turns marked daily-memory lines into deduplicated feedback.
-func ScanFriction(db *sql.DB, workspace string, markers []string, modelID string) (FrictionResult, error) {
+// With dryRun it reports what it would insert and writes nothing.
+func ScanFriction(db *sql.DB, workspace string, markers []string, modelID string, dryRun bool) (FrictionResult, error) {
 	if len(markers) == 0 {
 		markers = defaultFrictionMarkers
 	}
@@ -50,7 +64,7 @@ func ScanFriction(db *sql.DB, workspace string, markers []string, modelID string
 		}
 	}
 
-	result := FrictionResult{}
+	result := FrictionResult{DryRun: dryRun}
 	for _, file := range discovery.Files {
 		if file.Kind != "daily" || !file.Exists {
 			continue
@@ -77,6 +91,15 @@ func ScanFriction(db *sql.DB, workspace string, markers []string, modelID string
 			}
 			note := fmt.Sprintf("%s  [src: %s:%d]", line, file.Path, lineNumber)
 			context := fmt.Sprintf("openclaw-friction:%s source=%s", identity, MemoryRef(file.Path, fmt.Sprintf("L%d", lineNumber)))
+			if dryRun {
+				result.Proposed = append(result.Proposed, ProposedFeedback{
+					Note: note, Context: context,
+					Role: "codebase", Category: "dogfood", Severity: "med",
+				})
+				identities[identity] = true
+				result.Created++
+				continue
+			}
 			if _, err := feedback.Add(db, feedback.AddInput{
 				Role: "codebase", Category: "dogfood", Severity: "med",
 				Note: note, Context: context, ModelID: modelID,
@@ -130,6 +153,7 @@ func frictionIdentityFromContext(context string) string {
 
 func newFrictionCommand(opts *commandOptions) *cobra.Command {
 	var markers []string
+	var dryRun bool
 	parent := &cobra.Command{Use: "friction", Short: "Scan memory for friction markers"}
 	scan := &cobra.Command{
 		Use:   "scan",
@@ -141,18 +165,27 @@ func newFrictionCommand(opts *commandOptions) *cobra.Command {
 				return err
 			}
 			defer runtime.close()
-			result, err := ScanFriction(runtime.app.DB, runtime.config.Workspace, markers, runtime.app.ModelID)
+			result, err := ScanFriction(runtime.app.DB, runtime.config.Workspace, markers, runtime.app.ModelID, dryRun)
 			if err != nil {
 				return err
 			}
 			if runtime.config.JSON {
 				return json.NewEncoder(cmd.OutOrStdout()).Encode(result)
 			}
+			if dryRun {
+				fmt.Fprintf(cmd.OutOrStdout(), "files=%d hits=%d would_create=%d skipped=%d (dry run, nothing written)\n",
+					result.FilesScanned, result.Hits, len(result.Proposed), result.Skipped)
+				for _, p := range result.Proposed {
+					fmt.Fprintf(cmd.OutOrStdout(), "  + [%s/%s] %s\n", p.Role, p.Severity, p.Note)
+				}
+				return nil
+			}
 			fmt.Fprintf(cmd.OutOrStdout(), "files=%d hits=%d created=%d skipped=%d\n", result.FilesScanned, result.Hits, result.Created, result.Skipped)
 			return nil
 		},
 	}
 	scan.Flags().StringSliceVar(&markers, "marker", nil, "case-insensitive literal marker (repeatable or comma-separated)")
+	scan.Flags().BoolVar(&dryRun, "dry-run", false, "print the feedback rows that would be created and write none")
 	parent.AddCommand(scan)
 	return parent
 }
