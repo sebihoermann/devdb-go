@@ -3,6 +3,7 @@
     {
       "created_at": "\u003cTIMESTAMP\u003e",
       "id": "<ID>",
+      "model_id": "unknown",
       "note": "open feedback note",
       "role": "model",
       "severity": "med",

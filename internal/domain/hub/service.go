@@ -103,14 +103,61 @@ func OpenHub(metadataDB string) (*sql.DB, error) {
 	return db, nil
 }
 
+// ErrAliasTaken is returned by Register when the requested alias already
+// belongs to a different project root. An alias is an identity, not a label:
+// silently repointing it would hide one project and mislabel another.
+var ErrAliasTaken = errors.New("alias already registered to another project")
+
 // Register adds a project to the registry and hub, then syncs when possible.
+//
+// An explicit alias that already points elsewhere is an error (ErrAliasTaken),
+// never a silent repoint. A derived alias (alias == "") resolves a collision by
+// appending -2/-3 like AutoRegister, so walking a tree of same-named
+// directories still registers every one of them.
 func Register(root, alias, registry, metadataDB string) (RegisteredProject, error) {
 	root, err := filepath.Abs(expandHome(root))
 	if err != nil {
 		return RegisteredProject{}, err
 	}
-	if alias == "" {
+	projects, err := ReadRegistry(registry)
+	if err != nil {
+		return RegisteredProject{}, err
+	}
+	byAlias := make(map[string]string, len(projects))
+	for _, p := range projects {
+		byAlias[p.Alias] = p.Root
+	}
+	explicitAlias := strings.TrimSpace(alias) != ""
+	if !explicitAlias {
 		alias = defaultAlias(root)
+	}
+	if owner, taken := byAlias[alias]; taken && owner != root {
+		if explicitAlias {
+			return RegisteredProject{}, fmt.Errorf(
+				"%w: %q -> %s, requested %s; unregister it first or pick another alias",
+				ErrAliasTaken, alias, owner, root)
+		}
+		alias = freeAlias(alias, root, byAlias)
+	}
+
+	// The hub carries its own copy of the alias->root mapping. Read it before
+	// any write so a stale hub row cannot pass the registry check and then be
+	// left untouched by the guarded upsert, splitting the two stores.
+	hub, err := OpenHub(metadataDB)
+	if err != nil {
+		return RegisteredProject{}, err
+	}
+	defer hub.Close()
+	var hubOwner string
+	switch err := hub.QueryRow(`SELECT root_path FROM projects WHERE alias=?`, alias).Scan(&hubOwner); {
+	case err == nil && hubOwner != root && explicitAlias:
+		return RegisteredProject{}, fmt.Errorf(
+			"%w: %q -> %s in the hub, requested %s; run 'devdb hub unregister %s' first or pick another alias",
+			ErrAliasTaken, alias, hubOwner, root, alias)
+	case err == nil && hubOwner != root:
+		alias = freeAlias(alias, root, byAlias)
+	case err != nil && !errors.Is(err, sql.ErrNoRows):
+		return RegisteredProject{}, err
 	}
 	project := RegisteredProject{
 		Alias:  alias,
@@ -121,10 +168,6 @@ func Register(root, alias, registry, metadataDB string) (RegisteredProject, erro
 		project.Exists = true
 	}
 
-	projects, err := ReadRegistry(registry)
-	if err != nil {
-		return RegisteredProject{}, err
-	}
 	filtered := projects[:0]
 	for _, p := range projects {
 		if p.Alias == alias || p.Root == root {
@@ -137,16 +180,13 @@ func Register(root, alias, registry, metadataDB string) (RegisteredProject, erro
 		return RegisteredProject{}, err
 	}
 
-	hub, err := OpenHub(metadataDB)
-	if err != nil {
-		return project, err
-	}
-	defer hub.Close()
-
 	now := storage.NowUTC()
+	// The WHERE repeats the registry rule at the storage layer: an existing
+	// row may only be updated when it already describes this same root.
 	_, err = hub.Exec(`
 		INSERT INTO projects(alias, root_path, registered_at) VALUES (?, ?, ?)
-		ON CONFLICT(alias) DO UPDATE SET root_path=excluded.root_path`,
+		ON CONFLICT(alias) DO UPDATE SET root_path=excluded.root_path
+		WHERE projects.root_path=excluded.root_path`,
 		project.Alias, project.Root, now)
 	if err != nil {
 		return project, err

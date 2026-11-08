@@ -28,6 +28,10 @@ type FrictionResult struct {
 	// reviewed before anything is written.
 	Proposed []ProposedFeedback `json:"proposed,omitempty"`
 	DryRun   bool               `json:"dry_run,omitempty"`
+	// ModelID echoes the id stamped on created rows. It is reported so a scan
+	// that wrote rows under an unresolved id ("unknown") is visible in the
+	// same output that claims success, instead of only in the ledger.
+	ModelID string `json:"model_id,omitempty"`
 }
 
 // ProposedFeedback is one feedback row a scan would insert.
@@ -64,7 +68,10 @@ func ScanFriction(db *sql.DB, workspace string, markers []string, modelID string
 		}
 	}
 
-	result := FrictionResult{DryRun: dryRun}
+	if strings.TrimSpace(modelID) == "" {
+		modelID = "unknown"
+	}
+	result := FrictionResult{DryRun: dryRun, ModelID: modelID}
 	for _, file := range discovery.Files {
 		if file.Kind != "daily" || !file.Exists {
 			continue
@@ -180,7 +187,11 @@ func newFrictionCommand(opts *commandOptions) *cobra.Command {
 				}
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "files=%d hits=%d created=%d skipped=%d\n", result.FilesScanned, result.Hits, result.Created, result.Skipped)
+			fmt.Fprintf(cmd.OutOrStdout(), "files=%d hits=%d created=%d skipped=%d model_id=%s\n",
+				result.FilesScanned, result.Hits, result.Created, result.Skipped, result.ModelID)
+			if result.Created > 0 && result.ModelID == "unknown" {
+				fmt.Fprintln(cmd.ErrOrStderr(), "warning: rows were written with model_id=unknown; pass --model-id or set DEVDB_MODEL_ID")
+			}
 			return nil
 		},
 	}

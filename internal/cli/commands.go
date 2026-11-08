@@ -119,6 +119,14 @@ var Version = "dev"
 func newRoot() *cobra.Command {
 	var jsonOut bool
 
+	// flagModelID overrides the model recorded on rows this invocation writes.
+	// Precedence: --model-id > DEVDB_MODEL_ID > "unknown". The env var is the
+	// ambient path; the flag exists because a single long-lived process (a
+	// gateway) switches models without restarting, so a static environment value
+	// goes stale the moment the runtime model changes. Callers that know the live
+	// model pass it per invocation.
+	var flagModelID string
+
 	root := &cobra.Command{
 		Use:           "devdb",
 		Short:         "Queryable per-project memory for codebases",
@@ -130,12 +138,20 @@ func newRoot() *cobra.Command {
 	root.PersistentFlags().StringVar(&flagRepo, "repo", "", "repository root (default: auto-detect)")
 	root.PersistentFlags().StringVar(&flagRepo, "repo-root", "", "alias for --repo (deprecated; for legacy muscle memory)")
 	root.PersistentFlags().StringVar(&flagDB, "db", "", "database path (default: .devdb/development.db)")
+	root.PersistentFlags().StringVar(&flagModelID, "model-id", "", "model id recorded on rows this invocation writes (default: $DEVDB_MODEL_ID, else \"unknown\")")
 	root.PersistentFlags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
 	root.PersistentFlags().BoolVar(&flagAll, "all", false, "expand list limits on read commands")
 	root.PersistentFlags().BoolVar(&flagVerbose, "verbose", false, "include diagnostic detail")
 
 	open := func(cmd *cobra.Command) (*app.Context, error) {
-		return app.Open(flagRepo, flagDB, jsonOut)
+		ctx, err := app.Open(flagRepo, flagDB, jsonOut)
+		if err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(flagModelID) != "" {
+			ctx.ModelID = strings.TrimSpace(flagModelID)
+		}
+		return ctx, nil
 	}
 
 	root.AddCommand(
@@ -564,7 +580,7 @@ func cmdFeedbackAdd(open opener) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return ctx.Out.WriteResult(id, map[string]any{"kind": "feedback"})
+			return ctx.Out.WriteResult(id, map[string]any{"kind": "feedback", "model_id": ctx.ModelID})
 		},
 	}
 	c.Flags().StringVar(&role, "role", "", "user|model|codebase")

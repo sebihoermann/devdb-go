@@ -3,6 +3,7 @@ package openclaw
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/sebihoermann/devdb-go/internal/app"
 	"github.com/spf13/cobra"
@@ -12,6 +13,11 @@ type commandOptions struct {
 	workspace string
 	repo      string
 	json      bool
+	// modelID stamps rows this adapter writes. Empty means "fall back to
+	// DEVDB_MODEL_ID". It is a flag as well as an env var because the caller
+	// (a gateway) knows the live model per turn and its process environment
+	// does not change when the model does.
+	modelID string
 }
 
 type runtime struct {
@@ -33,6 +39,9 @@ func openRuntime(opts *commandOptions, requireDB bool) (*runtime, error) {
 	ctx, err := app.Open(config.Repo, "", config.JSON)
 	if err != nil {
 		return nil, err
+	}
+	if strings.TrimSpace(opts.modelID) != "" {
+		ctx.ModelID = strings.TrimSpace(opts.modelID)
 	}
 	if requireDB {
 		if err := ctx.RequireDB(); err != nil {
@@ -58,6 +67,7 @@ func NewCommand() *cobra.Command {
 	root.PersistentFlags().StringVar(&opts.workspace, "workspace", "", "OpenClaw workspace root")
 	root.PersistentFlags().StringVar(&opts.repo, "repo", "", "target repository containing .devdb")
 	root.PersistentFlags().BoolVar(&opts.json, "json", false, "machine-readable JSON output")
+	root.PersistentFlags().StringVar(&opts.modelID, "model-id", "", "model id recorded on rows this run writes (default: $DEVDB_MODEL_ID)")
 	root.AddCommand(newVersionCommand(), newListCommand(&opts), newLinksCommand(&opts), newSyncCommand(&opts), newFrictionCommand(&opts), newDoctorCommand(&opts))
 	return root
 }

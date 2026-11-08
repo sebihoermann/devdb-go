@@ -18,7 +18,11 @@ type Row struct {
 	Context     string `json:"context,omitempty"`
 	Status      string `json:"status"`
 	ProposedFix string `json:"proposed_fix,omitempty"`
-	CreatedAt   string `json:"created_at"`
+	// ModelID is the model that authored the row. It is emitted because the
+	// audit trail is the whole point of the column: a read shape without it
+	// makes a correctly stamped row indistinguishable from an unstamped one.
+	ModelID   string `json:"model_id"`
+	CreatedAt string `json:"created_at"`
 }
 
 // AddInput captures a new feedback row.
@@ -78,7 +82,8 @@ func List(db *sql.DB, f ListFilter) ([]Row, error) {
 	if limit < 0 {
 		limit = 20
 	}
-	q := `SELECT id, role, category, severity, note, context, status, COALESCE(proposed_fix,''), created_at
+	q := `SELECT id, role, category, severity, note, context, status, COALESCE(proposed_fix,''),
+	             COALESCE(model_id,''), created_at
 	      FROM feedback`
 	args := []any{}
 	var where []string
@@ -117,7 +122,7 @@ func List(db *sql.DB, f ListFilter) ([]Row, error) {
 	for rows.Next() {
 		var r Row
 		var cat, sev, ctx, fix sql.NullString
-		if err := rows.Scan(&r.ID, &r.Role, &cat, &sev, &r.Note, &ctx, &r.Status, &fix, &r.CreatedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.Role, &cat, &sev, &r.Note, &ctx, &r.Status, &fix, &r.ModelID, &r.CreatedAt); err != nil {
 			return nil, err
 		}
 		r.Category = cat.String
@@ -251,9 +256,10 @@ func Show(db *sql.DB, idPrefix string) (Row, error) {
 	var r Row
 	var cat, sev, ctx, fix sql.NullString
 	err = db.QueryRow(`
-		SELECT id, role, category, severity, note, context, status, COALESCE(proposed_fix,''), created_at
+		SELECT id, role, category, severity, note, context, status, COALESCE(proposed_fix,''),
+		       COALESCE(model_id,''), created_at
 		FROM feedback WHERE id=?`, id,
-	).Scan(&r.ID, &r.Role, &cat, &sev, &r.Note, &ctx, &r.Status, &fix, &r.CreatedAt)
+	).Scan(&r.ID, &r.Role, &cat, &sev, &r.Note, &ctx, &r.Status, &fix, &r.ModelID, &r.CreatedAt)
 	if err != nil {
 		return Row{}, fmt.Errorf("feedback not found: %w", err)
 	}
