@@ -19,18 +19,23 @@ Each item has:
 
 ## Baseline (must be true before item 1)
 
-Verified on `main`, 2026-11-08:
+> **Superseded — re-verified 2026-11-08 after M1–M6 landed.** The table below was
+> the state *before* item 1. It is kept because it is the reason 1.1 came first:
+> a red baseline hides new regressions. The current state follows it.
 
-| Check | Result |
-|---|---|
-| `go build ./...` | clean |
-| `go test ./...` | **FAIL** on `internal/domain/hub` (2 tests) |
-| packages passing | 27 |
-| `devdb --version` | `unknown flag: --version`, rc=1 |
-| `devdb feedback list` flags | `--status` only |
-| `devdb plan acceptance list` | prints help, rc=0 |
-| `devdb archive list` | exists, `--table/--since/--until/--limit` |
-| `cmd/devdb-openclaw` tests | `[no test files]` |
+**Original baseline, verified on `main`, 2026-11-08 (pre-M1):**
+
+| Check | Result (then) | Result now |
+|---|---|---|
+| `go build ./...` | clean | clean |
+| `go test ./...` | **FAIL** on `internal/domain/hub` (2 tests) | **0 failures**, all packages ok |
+| packages passing | 27 | 28 |
+| `devdb --version` | `unknown flag: --version`, rc=1 | works (`devdb version dev`) |
+| `devdb feedback list` flags | `--status` only | `--status/--category/--severity/--role/--context/--limit` |
+| `devdb plan acceptance list` | prints help, rc=0 | lists criteria (`--plan/--plan-item/--open`) |
+| `devdb archive list` | exists, `--table/--since/--until/--limit` | unchanged, plus `archive show` |
+| `cmd/devdb-openclaw` tests | `[no test files]` | has test files |
+| Host-env dependence | hub tests fail where `/etc/devdb/config.json` exists | hermetic — `ConfigSearchPathsForTest` + pinned `DEVDB_CONFIG` |
 
 **The baseline itself is broken, so item 1.1 fixes it first.** Every other item's
 acceptance writes a *new* green line into a suite that already has a red one;
@@ -39,6 +44,11 @@ without 1.1 a regression is indistinguishable from the pre-existing failure.
 Host-level note for the fixing dev: the two hub failures only reproduce where a
 system-wide devdb config file exists. A machine without one sees green and will
 not reproduce the report — that is the bug, not a mis-report. See 1.1.
+
+**A second host-env leak of the same class was found while closing the findings
+and fixed in `b26d63d`:** an ambient `DEVDB_MODEL_ID` broke two M13 golden
+fixtures that carry `"model_id": "unknown"`. `internal/cli`'s `TestMain` now
+unsets it, so `go test ./...` is green on a host that exports the variable.
 
 ---
 
