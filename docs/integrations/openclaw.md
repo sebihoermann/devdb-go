@@ -15,7 +15,7 @@ needed, belongs above the local database and must preserve synchronous local
 writes.
 
 OpenClaw policy stays outside `cmd/devdb`: workspace filenames, daily-note
-patterns, friction markers, hooks, and scheduler commands live under
+patterns, and friction markers live under
 `internal/integrations/openclaw` and are exposed by the separately installed
 `cmd/devdb-openclaw` binary. The adapter reuses devdb domain services and never
 writes ledger tables directly.
@@ -65,9 +65,13 @@ devdb-openclaw --workspace ~/.openclaw/workspace --repo ~/.openclaw/workspace li
 devdb-openclaw --workspace ~/.openclaw/workspace --repo ~/.openclaw/workspace sync
 devdb-openclaw --workspace ~/.openclaw/workspace --repo ~/.openclaw/workspace friction scan
 devdb-openclaw --workspace ~/.openclaw/workspace --repo ~/.openclaw/workspace doctor
-devdb-openclaw --workspace ~/.openclaw/workspace --repo ~/.openclaw/workspace schedule
-devdb-openclaw --workspace ~/.openclaw/workspace --repo ~/.openclaw/workspace schedule --apply
 ```
+
+The verb list is exactly `version`, `list`, `links`, `sync`, `friction scan`, and
+`doctor`. There is no `schedule` verb — it was removed because it wrote two daily
+cron entries that shelled out to a binary nobody had installed, so running it
+created two silently failing jobs every day. Scheduling is the operator's job:
+run `sync` and `friction scan` from your own cron or systemd timer.
 
 `--workspace` defaults to `$OPENCLAW_WORKSPACE`, then
 `~/.openclaw/workspace`. `--repo` defaults to
@@ -75,10 +79,7 @@ devdb-openclaw --workspace ~/.openclaw/workspace --repo ~/.openclaw/workspace sc
 machine-readable output. Write commands return non-zero when the target ledger
 is unavailable; they do not silently select an ancestor ledger.
 
-`schedule` is preview-only unless `--apply` is present. Applying a schedule
-must inspect existing OpenClaw cron state and update matching managed entries
-instead of creating duplicates. Ordinary `sync` and `friction scan` commands
-never mutate scheduler configuration.
+No adapter command mutates scheduler configuration.
 
 `links --plan <slug-or-id>` joins plan items to their `memory_ref` values and
 reports whether the referenced workspace file currently exists. It accepts the
@@ -99,20 +100,18 @@ Install the adapter separately from core devdb:
 go install github.com/sebihoermann/devdb-go/cmd/devdb-openclaw@latest
 ```
 
-Ensure `$(go env GOPATH)/bin` is on `PATH`, especially before applying the
-managed schedule. Alternatively, pass an absolute adapter path with
-`schedule --binary /path/to/devdb-openclaw`.
+Ensure `$(go env GOPATH)/bin` is on `PATH` before running the adapter from
+cron or a systemd timer.
 
 Existing shell integrations can migrate one command at a time. First compare
 `list`, `sync`, and `friction scan` output against the scripts with scheduler
 changes disabled. Keep existing cron entries until repeated adapter runs prove
-idempotent. Then preview `schedule`, apply it explicitly, and disable the old
-entries.
+idempotent, then point them at the adapter and disable the old scripts.
 
-Rollback consists of disabling adapter-managed schedules and restoring the
-previous shell schedule. The adapter does not rewrite memory Markdown, and its
-devdb writes use ordinary architecture-note and feedback records, so removing
-the binary does not make the ledger unreadable.
+Rollback is removing the binary and restoring the previous shell scripts. The
+adapter does not rewrite memory Markdown, and its devdb writes use ordinary
+architecture-note and feedback records, so removing the binary does not make
+the ledger unreadable.
 
 ## Update-survival checks
 
@@ -122,8 +121,6 @@ After upgrading OpenClaw or devdb:
 2. Compare `list --json` against the expected workspace fixture.
 3. Run `sync` twice and confirm the second run creates no architecture notes.
 4. Run `friction scan` twice and confirm the second run creates no feedback.
-5. Preview `schedule` and inspect the exact OpenClaw cron changes before using
-   `--apply`.
 
 No adapter command imports OpenClaw internals. Compatibility is limited to the
 documented workspace file contract and the public `openclaw` CLI.
