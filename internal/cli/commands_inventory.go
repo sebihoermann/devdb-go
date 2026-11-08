@@ -15,7 +15,7 @@ import (
 )
 
 func cmdInventory(open opener) *cobra.Command {
-	inv := &cobra.Command{Use: "inventory", Short: "File inventory and context reads"}
+	inv := failClosed(&cobra.Command{Use: "inventory", Short: "File inventory and context reads"})
 	inv.AddCommand(cmdInventoryScan(open), cmdInventoryLoc(open), cmdInventoryContext(open), cmdInventoryDiff(open), cmdInventorySuggestCuts(open))
 	return inv
 }
@@ -247,7 +247,7 @@ func cmdInventoryDiff(open opener) *cobra.Command {
 }
 
 func cmdArch(open opener) *cobra.Command {
-	arch := &cobra.Command{Use: "arch", Short: "Architecture notes"}
+	arch := failClosed(&cobra.Command{Use: "arch", Short: "Architecture notes"})
 	arch.AddCommand(cmdArchAdd(open), cmdArchList(open), cmdArchShow(open),
 		cmdArchUpdate(open), cmdArchVerify(open), cmdArchRender(open))
 	return arch

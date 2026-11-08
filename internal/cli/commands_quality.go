@@ -19,7 +19,7 @@ import (
 )
 
 func cmdReview(open opener) *cobra.Command {
-	r := &cobra.Command{Use: "review", Short: "Code review ledger"}
+	r := failClosed(&cobra.Command{Use: "review", Short: "Code review ledger"})
 	r.AddCommand(
 		cmdReviewStart(open),
 		cmdReviewFinding(open),
@@ -412,7 +412,7 @@ func cmdReviewPrinciples(open opener) *cobra.Command {
 }
 
 func cmdVerify(open opener) *cobra.Command {
-	v := &cobra.Command{Use: "verify", Short: "Verification reuse ledger"}
+	v := failClosed(&cobra.Command{Use: "verify", Short: "Verification reuse ledger"})
 	v.AddCommand(cmdVerifyRecord(open), cmdVerifyQuery(open), cmdVerifyShow(open), cmdVerifyDismiss(open))
 	return v
 }

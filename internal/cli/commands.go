@@ -166,6 +166,30 @@ func newRoot() *cobra.Command {
 	return root
 }
 
+// failClosed makes a non-runnable parent command reject anything it does not
+// recognise. Without this, cobra's default for a parent with no RunE is to
+// print help and exit 0 — so `devdb plan acceptance list` (a verb that did not
+// exist) and `devdb plan nosuchverb` both reported SUCCESS to a script. An
+// unknown subcommand must be an error, never a silent empty result.
+//
+// Applied to every group command; the acceptance matrix in
+// plan_unknown_subcommand_test.go walks them all.
+func failClosed(group *cobra.Command) *cobra.Command {
+	group.Args = cobra.NoArgs
+	group.RunE = func(cmd *cobra.Command, args []string) error {
+		// Reached only when a positional arg did not match a subcommand, or
+		// when the group is invoked bare.
+		if len(args) > 0 {
+			return usageError(fmt.Sprintf("unknown subcommand %q for %q (run 'devdb %s --help')", args[0], cmd.CommandPath(), cmd.CommandPath()[len("devdb "):]))
+		}
+		// Bare group invocation stays friendly: print help and succeed, which is
+		// how a human discovers subcommands. Only an unrecognised *word* fails —
+		// that is a typo, and reporting it as success is the bug this closes.
+		return cmd.Help()
+	}
+	return group
+}
+
 func cmdInit(open opener) *cobra.Command {
 	return &cobra.Command{
 		Use:   "init",
@@ -461,7 +485,7 @@ func argvFlag(name string) string {
 }
 
 func cmdFeedback(open opener) *cobra.Command {
-	feedbackCmd := &cobra.Command{Use: "feedback", Short: "Feedback and observations"}
+	feedbackCmd := failClosed(&cobra.Command{Use: "feedback", Short: "Feedback and observations"})
 	feedbackCmd.AddCommand(cmdFeedbackAdd(open), cmdFeedbackList(open), cmdFeedbackShow(open),
 		cmdFeedbackClose(open), cmdFeedbackAnnotate(open), cmdFeedbackSeverity(open), cmdFeedbackImport(open))
 	return feedbackCmd
@@ -650,22 +674,22 @@ func cmdFeedbackClose(open opener) *cobra.Command {
 }
 
 func cmdPlan(open opener) *cobra.Command {
-	plan := &cobra.Command{Use: "plan", Short: "Structured planning"}
+	plan := failClosed(&cobra.Command{Use: "plan", Short: "Structured planning"})
 	plan.AddCommand(
 		cmdPlanCreate(open), cmdPlanList(open), cmdPlanShow(open), cmdPlanTree(open), cmdPlanStatus(open),
 		cmdPlanScaffold(open), cmdPlanPromote(open), cmdPlanReconcile(open), cmdPlanDelete(open),
 	)
-	ms := &cobra.Command{Use: "milestone", Short: "Plan milestones"}
+	ms := failClosed(&cobra.Command{Use: "milestone", Short: "Plan milestones"})
 	ms.AddCommand(cmdPlanMilestoneAdd(open), cmdPlanMilestoneList(open), cmdPlanMilestoneStatus(open))
 	plan.AddCommand(ms)
-	item := &cobra.Command{Use: "item", Short: "Plan items"}
+	item := failClosed(&cobra.Command{Use: "item", Short: "Plan items"})
 	item.AddCommand(cmdPlanItemAdd(open), cmdPlanItemList(open), cmdPlanItemShow(open),
 		cmdPlanItemStart(open), cmdPlanItemPause(open), cmdPlanItemClose(open), cmdPlanItemStatus(open))
 	plan.AddCommand(item)
-	acc := &cobra.Command{Use: "acceptance", Short: "Acceptance criteria"}
-	acc.AddCommand(cmdPlanAcceptanceAdd(open), cmdPlanAcceptanceMeet(open), cmdPlanAcceptanceBackfill(open))
+	acc := failClosed(&cobra.Command{Use: "acceptance", Short: "Acceptance criteria"})
+	acc.AddCommand(cmdPlanAcceptanceAdd(open), cmdPlanAcceptanceList(open), cmdPlanAcceptanceMeet(open), cmdPlanAcceptanceBackfill(open))
 	plan.AddCommand(acc)
-	file := &cobra.Command{Use: "file", Short: "Scoped plan files"}
+	file := failClosed(&cobra.Command{Use: "file", Short: "Scoped plan files"})
 	file.AddCommand(cmdPlanFileAdd(open))
 	plan.AddCommand(file)
 	return plan
@@ -1039,7 +1063,7 @@ func cmdImport(open opener) *cobra.Command {
 	c.Flags().BoolVar(&replace, "replace", false, "overwrite non-empty destination when using --output")
 	c.Flags().BoolVar(&noArchive, "no-archive-python-only", false, "with --apply, skip auto-archiving python-only tables to .devdb/archive-python-only/")
 	c.Flags().BoolVar(&force, "force", false, "with --apply, ignore the .python-bak-already-migrated guard")
-	importCmd := &cobra.Command{Use: "import", Short: "One-time data import"}
+	importCmd := failClosed(&cobra.Command{Use: "import", Short: "One-time data import"})
 	importCmd.AddCommand(c)
 	return importCmd
 }

@@ -15,7 +15,7 @@ import (
 )
 
 func cmdArchive(open opener) *cobra.Command {
-	arch := &cobra.Command{Use: "archive", Short: "Archive historical ledger rows"}
+	arch := failClosed(&cobra.Command{Use: "archive", Short: "Archive historical ledger rows"})
 	arch.AddCommand(cmdArchiveRun(open), cmdArchiveList(open), cmdArchiveRestore(open), cmdArchiveGC(open))
 	return arch
 }
@@ -229,7 +229,7 @@ func cmdArchiveGC(open opener) *cobra.Command {
 }
 
 func cmdAnalytics(open opener) *cobra.Command {
-	an := &cobra.Command{Use: "analytics", Short: "CLI telemetry"}
+	an := failClosed(&cobra.Command{Use: "analytics", Short: "CLI telemetry"})
 	an.AddCommand(cmdAnalyticsMissed(open), cmdAnalyticsSummary(open))
 	return an
 }
@@ -369,7 +369,7 @@ func cmdDoctorHygiene(open opener) *cobra.Command {
 // do not have to hand-craft the sequence (the friction called out in
 // docs/workflow-review-2026-06-24.md).
 func cmdLedger(open opener) *cobra.Command {
-	ledger := &cobra.Command{Use: "ledger", Short: "Bundled hygiene operations on the devdb ledger"}
+	ledger := failClosed(&cobra.Command{Use: "ledger", Short: "Bundled hygiene operations on the devdb ledger"})
 	ledger.AddCommand(cmdLedgerHousekeeping(open))
 	return ledger
 }

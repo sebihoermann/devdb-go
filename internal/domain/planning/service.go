@@ -273,6 +273,76 @@ func ShowItem(db *sql.DB, idPrefix string) (PlanItem, []Acceptance, error) {
 	return p, acc, rows.Err()
 }
 
+// AcceptanceRow is an acceptance criterion plus the item and plan it belongs to,
+// so a list across a plan is readable without a second lookup per row.
+type AcceptanceRow struct {
+	Acceptance
+	PlanItemID    string `json:"plan_item_id"`
+	PlanItemTitle string `json:"plan_item_title"`
+	PlanItemNum   int    `json:"plan_item_number"`
+}
+
+// ListAcceptanceByItem returns the criteria for one plan item, in ordinal order.
+func ListAcceptanceByItem(db *sql.DB, itemPrefix string) ([]AcceptanceRow, error) {
+	id, err := resolveItemID(db, itemPrefix)
+	if err != nil {
+		return nil, err
+	}
+	return queryAcceptance(db, `WHERE a.plan_item_id = ?`, id)
+}
+
+// ListAcceptanceByPlan returns every criterion under a plan, ordered by
+// milestone, item number, then ordinal so the output reads like the plan.
+func ListAcceptanceByPlan(db *sql.DB, planPrefix string) ([]AcceptanceRow, error) {
+	planID, err := ResolvePlanID(db, planPrefix)
+	if err != nil {
+		return nil, err
+	}
+	return queryAcceptance(db, `WHERE i.plan_id = ?`, planID)
+}
+
+// ListAcceptanceOpen returns every unmet criterion, newest plan items last.
+func ListAcceptanceOpen(db *sql.DB, planPrefix string) ([]AcceptanceRow, error) {
+	if planPrefix == "" {
+		return queryAcceptanceOpen(db, ``)
+	}
+	planID, err := ResolvePlanID(db, planPrefix)
+	if err != nil {
+		return nil, err
+	}
+	return queryAcceptanceOpen(db, `AND i.plan_id = ?`, planID)
+}
+
+func queryAcceptanceOpen(db *sql.DB, extra string, args ...any) ([]AcceptanceRow, error) {
+	where := `WHERE a.status <> 'met' ` + extra
+	return queryAcceptance(db, where, args...)
+}
+
+func queryAcceptance(db *sql.DB, where string, args ...any) ([]AcceptanceRow, error) {
+	q := `
+		SELECT a.id, a.ordinal, a.criterion, a.status, COALESCE(a.evidence,''),
+		       COALESCE(i.id,''), COALESCE(i.title,''), COALESCE(i.item_number,0)
+		FROM plan_item_acceptance a
+		LEFT JOIN plan_items i ON i.id = a.plan_item_id
+		` + where + `
+		ORDER BY i.item_number, a.ordinal, a.id`
+	rows, err := db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []AcceptanceRow
+	for rows.Next() {
+		var r AcceptanceRow
+		if err := rows.Scan(&r.ID, &r.Ordinal, &r.Criterion, &r.Status, &r.Evidence,
+			&r.PlanItemID, &r.PlanItemTitle, &r.PlanItemNum); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // MeetAcceptance marks a criterion met with evidence.
 func MeetAcceptance(db *sql.DB, accPrefix, evidence, modelID string) (string, error) {
 	rows, err := db.Query(`SELECT id FROM plan_item_acceptance`)

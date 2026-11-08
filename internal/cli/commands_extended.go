@@ -18,7 +18,7 @@ import (
 )
 
 func cmdGoal(open opener) *cobra.Command {
-	goal := &cobra.Command{Use: "goal", Short: "Project goals"}
+	goal := failClosed(&cobra.Command{Use: "goal", Short: "Project goals"})
 	goal.AddCommand(cmdGoalAdd(open), cmdGoalList(open), cmdGoalSet(open), cmdGoalDelete(open))
 	return goal
 }
@@ -133,7 +133,7 @@ func cmdGoalDelete(open opener) *cobra.Command {
 }
 
 func cmdFeature(open opener) *cobra.Command {
-	feature := &cobra.Command{Use: "feature", Short: "Shipped features"}
+	feature := failClosed(&cobra.Command{Use: "feature", Short: "Shipped features"})
 	feature.AddCommand(cmdFeatureAdd(open), cmdFeatureList(open))
 	return feature
 }
@@ -215,7 +215,7 @@ func cmdFeedbackAnnotate(open opener) *cobra.Command {
 }
 
 func cmdTask(open opener) *cobra.Command {
-	task := &cobra.Command{Use: "task", Short: "Lightweight tasks"}
+	task := failClosed(&cobra.Command{Use: "task", Short: "Lightweight tasks"})
 	task.AddCommand(cmdTaskAdd(open), cmdTaskList(open), cmdTaskShow(open), cmdTaskDone(open), cmdTaskStatus(open))
 	return task
 }
@@ -350,7 +350,7 @@ func cmdTaskStatus(open opener) *cobra.Command {
 }
 
 func cmdApproval(open opener) *cobra.Command {
-	ap := &cobra.Command{Use: "approval", Short: "Approval workflow"}
+	ap := failClosed(&cobra.Command{Use: "approval", Short: "Approval workflow"})
 	ap.AddCommand(cmdApprovalRequest(open), cmdApprovalApprove(open), cmdApprovalReject(open),
 		cmdApprovalWithdraw(open), cmdApprovalList(open), cmdApprovalLog(open))
 	return ap
@@ -521,7 +521,7 @@ func cmdApprovalLog(open opener) *cobra.Command {
 }
 
 func cmdReminder(open opener) *cobra.Command {
-	r := &cobra.Command{Use: "reminder", Short: "Reminders"}
+	r := failClosed(&cobra.Command{Use: "reminder", Short: "Reminders"})
 	r.AddCommand(cmdReminderAdd(open), cmdReminderList(open), cmdReminderShow(open),
 		cmdReminderDismiss(open), cmdReminderSnooze(open), cmdReminderUnsnooze(open))
 	return r

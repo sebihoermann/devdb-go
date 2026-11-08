@@ -10,7 +10,7 @@ import (
 )
 
 func cmdFeedbackImport(open opener) *cobra.Command {
-	importCmd := &cobra.Command{Use: "import", Short: "Bulk import feedback archives"}
+	importCmd := failClosed(&cobra.Command{Use: "import", Short: "Bulk import feedback archives"})
 	importCmd.AddCommand(cmdFeedbackImportMarkdown(open), cmdFeedbackImportCommits(open))
 	return importCmd
 }
