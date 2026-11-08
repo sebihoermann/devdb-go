@@ -51,16 +51,59 @@ func Add(db *sql.DB, in AddInput) (string, error) {
 // The "all" sentinel means "no status filter" — same contract as
 // goals.List, tasks.List and reminders.List. Passing it through literally
 // would filter for status='all' and match nothing.
-func List(db *sql.DB, status string, limit int) ([]Row, error) {
+// ListFilter selects feedback rows. Every non-empty field narrows the result;
+// an empty field means "no constraint on this column". Status keeps the "all"
+// sentinel meaning "no status filter", matching the other list verbs.
+//
+// Context is a substring match (LIKE %v%) because its real use is "everything
+// touching this file/area"; Category, Severity and Role are exact matches
+// because they are small closed vocabularies where a substring would surprise.
+type ListFilter struct {
+	Status   string
+	Category string
+	Severity string
+	Context  string
+	Role     string
+	Limit    int
+}
+
+// ListByStatus is the status+limit call shape kept for existing callers.
+func ListByStatus(db *sql.DB, status string, limit int) ([]Row, error) {
+	return List(db, ListFilter{Status: status, Limit: limit})
+}
+
+// List queries feedback matching f, newest first.
+func List(db *sql.DB, f ListFilter) ([]Row, error) {
+	limit := f.Limit
 	if limit < 0 {
 		limit = 20
 	}
 	q := `SELECT id, role, category, severity, note, context, status, COALESCE(proposed_fix,''), created_at
 	      FROM feedback`
 	args := []any{}
-	if status != "" && status != "all" {
-		q += ` WHERE status = ?`
-		args = append(args, status)
+	var where []string
+	if f.Status != "" && f.Status != "all" {
+		where = append(where, `status = ?`)
+		args = append(args, f.Status)
+	}
+	if f.Category != "" {
+		where = append(where, `category = ?`)
+		args = append(args, f.Category)
+	}
+	if f.Severity != "" {
+		where = append(where, `severity = ?`)
+		args = append(args, f.Severity)
+	}
+	if f.Role != "" {
+		where = append(where, `role = ?`)
+		args = append(args, f.Role)
+	}
+	if f.Context != "" {
+		where = append(where, `context LIKE ?`)
+		args = append(args, "%"+f.Context+"%")
+	}
+	if len(where) > 0 {
+		q += ` WHERE ` + strings.Join(where, ` AND `)
 	}
 	q += ` ORDER BY created_at DESC`
 	q, args = storage.AppendLimit(q, args, limit)

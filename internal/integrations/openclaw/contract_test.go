@@ -97,7 +97,7 @@ func TestAdapterContractInNonGitPathsWithSpaces(t *testing.T) {
 	}
 	defer ctx.Close()
 	notes, _ := architecture.List(ctx.DB, architecture.ListFilter{})
-	feedbackRows, _ := feedback.List(ctx.DB, "open", 0)
+	feedbackRows, _ := feedback.ListByStatus(ctx.DB, "open", 0)
 	if len(notes) != 2 || len(feedbackRows) != 1 {
 		t.Fatalf("notes=%d feedback=%d", len(notes), len(feedbackRows))
 	}

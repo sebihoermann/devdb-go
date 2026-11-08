@@ -15,14 +15,14 @@ func TestListUnlimitedWhenLimitZero(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	capped, err := feedback.List(db, "", 20)
+	capped, err := feedback.ListByStatus(db, "", 20)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(capped) != 20 {
 		t.Fatalf("limit 20: got %d", len(capped))
 	}
-	all, err := feedback.List(db, "", 0)
+	all, err := feedback.ListByStatus(db, "", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestCloseWithProposedFix(t *testing.T) {
 		t.Fatalf("row=%+v", row)
 	}
 
-	open, err := feedback.List(db, "open", 0)
+	open, err := feedback.ListByStatus(db, "open", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +139,7 @@ func TestListNegativeLimitDefaults(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	rows, err := feedback.List(db, "", -1)
+	rows, err := feedback.ListByStatus(db, "", -1)
 	if err != nil {
 		t.Fatal(err)
 	}

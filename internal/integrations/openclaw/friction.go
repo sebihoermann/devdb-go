@@ -39,7 +39,7 @@ func ScanFriction(db *sql.DB, workspace string, markers []string, modelID string
 	if err != nil {
 		return FrictionResult{}, err
 	}
-	existing, err := feedback.List(db, "", 0)
+	existing, err := feedback.ListByStatus(db, "", 0)
 	if err != nil {
 		return FrictionResult{}, err
 	}

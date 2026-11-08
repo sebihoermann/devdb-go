@@ -24,11 +24,11 @@ func TestFeedbackAnnotateCloseShow(t *testing.T) {
 	if err != nil || closed != id {
 		t.Fatalf("close=%q err=%v", closed, err)
 	}
-	all, err := List(db, "closed", 0)
+	all, err := ListByStatus(db, "closed", 0)
 	if err != nil || len(all) != 1 {
 		t.Fatalf("closed list=%d err=%v", len(all), err)
 	}
-	open, err := List(db, "open", -1)
+	open, err := ListByStatus(db, "open", -1)
 	if err != nil || len(open) != 0 {
 		t.Fatalf("open=%d", len(open))
 	}

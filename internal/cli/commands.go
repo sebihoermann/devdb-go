@@ -306,7 +306,7 @@ func cmdReport(open opener) *cobra.Command {
 			kind, ver, _ := storage.DetectSchema(ctx.DB)
 			snap, _ := status.Build(ctx.DB, ctx.Project.RepoRoot, string(kind), ver)
 			q, _ := status.Quality(ctx.DB)
-			fb, _ := feedback.List(ctx.DB, "open", effectiveListLimit(5))
+			fb, _ := feedback.ListByStatus(ctx.DB, "open", effectiveListLimit(5))
 			if ctx.Out.JSON {
 				return ctx.Out.PrintData(map[string]any{
 					"status":   snap,
@@ -549,10 +549,17 @@ func cmdFeedbackAdd(open opener) *cobra.Command {
 }
 
 func cmdFeedbackList(open opener) *cobra.Command {
-	var st string
+	var st, cat, sev, role, ctxFilter string
+	var limit int
 	c := &cobra.Command{
 		Use:   "list",
 		Short: "List feedback",
+		Long: "List feedback, optionally narrowed by status, category, severity, role,\n" +
+			"or --context (substring match on the context column).",
+		Example: `  devdb feedback list --status open
+  devdb feedback list --severity high --category dx --limit 5
+  devdb feedback list --context cli/commands.go --status all
+  devdb feedback list --role model --json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := open(cmd)
 			if err != nil {
@@ -565,7 +572,16 @@ func cmdFeedbackList(open opener) *cobra.Command {
 			if err := validateEnum("status", st, []string{"open", "closed", "all"}); err != nil {
 				return err
 			}
-			rows, err := feedback.List(ctx.DB, st, effectiveListLimit(20))
+			if err := validateEnum("severity", sev, []string{"info", "low", "med", "high", "critical"}); err != nil {
+				return err
+			}
+			if err := validateEnum("role", role, []string{"user", "model", "codebase"}); err != nil {
+				return err
+			}
+			rows, err := feedback.List(ctx.DB, feedback.ListFilter{
+				Status: st, Category: cat, Severity: sev, Role: role, Context: ctxFilter,
+				Limit: listLimitOr(limit, 20),
+			})
 			if err != nil {
 				return err
 			}
@@ -576,6 +592,11 @@ func cmdFeedbackList(open opener) *cobra.Command {
 		},
 	}
 	c.Flags().StringVar(&st, "status", "open", "filter by status (open|closed|all)")
+	c.Flags().StringVar(&cat, "category", "", "filter by exact category")
+	c.Flags().StringVar(&sev, "severity", "", "filter by severity (info|low|med|high|critical)")
+	c.Flags().StringVar(&role, "role", "", "filter by role (user|model|codebase)")
+	c.Flags().StringVar(&ctxFilter, "context", "", "substring match on the context column")
+	c.Flags().IntVar(&limit, "limit", 0, "max rows (default 20; --all expands)")
 	return c
 }
 

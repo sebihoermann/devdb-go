@@ -31,7 +31,7 @@ func TestScanFrictionCreatesStableSourceIdentity(t *testing.T) {
 	if result.Created != 2 || result.Hits != 2 {
 		t.Fatalf("result=%+v", result)
 	}
-	rows, err := feedback.List(db, "open", 0)
+	rows, err := feedback.ListByStatus(db, "open", 0)
 	if err != nil || len(rows) != 2 {
 		t.Fatalf("rows=%d err=%v", len(rows), err)
 	}
@@ -77,7 +77,7 @@ func TestChangedOrRemovedMarkersDoNotRewriteFeedback(t *testing.T) {
 	if err != nil || removed.Created != 0 {
 		t.Fatalf("removed=%+v err=%v", removed, err)
 	}
-	rows, err := feedback.List(db, "open", 0)
+	rows, err := feedback.ListByStatus(db, "open", 0)
 	if err != nil || len(rows) != 3 {
 		t.Fatalf("rows=%+v err=%v", rows, err)
 	}

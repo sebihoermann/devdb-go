@@ -37,14 +37,14 @@ func TestListByStatusClosed(t *testing.T) {
 	db, _ := testutil.TempDB(t)
 	id, _ := feedback.Add(db, feedback.AddInput{Role: "user", Note: "x", ModelID: "test"})
 	_, _ = feedback.Close(db, id, "", "test")
-	open, err := feedback.List(db, "open", 0)
+	open, err := feedback.ListByStatus(db, "open", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(open) != 0 {
 		t.Fatalf("open=%d", len(open))
 	}
-	closed, err := feedback.List(db, "closed", 0)
+	closed, err := feedback.ListByStatus(db, "closed", 0)
 	if err != nil || len(closed) != 1 {
 		t.Fatalf("closed=%d err=%v", len(closed), err)
 	}
