@@ -499,6 +499,40 @@ Federation queries (`hub across`) attach each project's `development.db` directl
 
 `hub doctor --scan DIR[,DIR...]` walks the given directories for `.devdb/development.db` repos missing from the registry and prints the fix command (`hub register --auto --scope DIR`). Run it after cloning new repos or when `hub audit` looks suspiciously empty — unregistered ledgers are invisible debt (2026-10-31: 15 of 19 fleet repos were unregistered and silent in every hub view). Without `--scan` the output shape is unchanged.
 
+## The OpenClaw adapter: `devdb-openclaw`
+
+A second, smaller CLI lives beside `devdb` for the OpenClaw lane. It reads the
+agent workspace and writes into a devdb ledger. It is a **separate binary**
+(`devdb-openclaw`), not a `devdb` subcommand.
+
+```bash
+devdb-openclaw version
+devdb-openclaw list        --workspace <ws> --repo <repo>
+devdb-openclaw links       --workspace <ws> --repo <repo> --plan <slug>
+devdb-openclaw sync        --workspace <ws> --repo <repo>
+devdb-openclaw friction scan --workspace <ws> --repo <repo> [--dry-run]
+devdb-openclaw doctor      --workspace <ws> --repo <repo>
+```
+
+- **`--workspace`** is the OpenClaw workspace (where `memory/*.md` lives);
+  `--repo` is the repository whose `.devdb/development.db` receives the rows.
+  They are usually different directories.
+- **There is no `schedule` verb.** It was removed deliberately: it wrote two
+  real OpenClaw cron jobs that shelled out to a binary that was not installed,
+  so running it created two permanently failing daily jobs. Drive the recurring
+  work from a cron entry that calls the installed binary instead.
+- **`friction scan` writes feedback rows** for friction markers found in the
+  workspace memory. It is idempotent per source line. Pass `--model-id` so the
+  rows are attributable (see the model-attribution rule in CLI conventions);
+  without it they land `model_id=unknown`, and the scan says so on stderr.
+  `--dry-run` previews without writing.
+- **`version` reports the build revision.** It is injected at build time like
+  `devdb --version`. A binary that only ever says `dev` cannot be told apart
+  from a stale one — check the revision before trusting an installed adapter.
+- **`doctor` is a readiness check** (workspace readable, target ledger present,
+  schema current, `devdb` on PATH). Run it first when the adapter misbehaves;
+  it names the failing check rather than making you guess.
+
 ## Other useful reads
 
 - `devdb report` — whole-project overview (use `--all` for more feedback rows).

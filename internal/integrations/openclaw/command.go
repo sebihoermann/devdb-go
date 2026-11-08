@@ -9,6 +9,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Version is the adapter build version reported by the version verb. It
+// defaults to "dev" for a plain go build; release builds inject it with
+// -ldflags "-X .../internal/integrations/openclaw.Version=<version>".
+//
+// It exists so an installed adapter can be identified. A hardcoded "dev"
+// made a stale binary indistinguishable from a current one - the same trap
+// that let /var/lib/hermes/bin/devdb sit eight commits behind HEAD unnoticed.
+var Version = "dev"
+
 type commandOptions struct {
 	workspace string
 	repo      string
@@ -77,17 +86,7 @@ func newVersionCommand() *cobra.Command {
 		Use:   "version",
 		Short: "Print adapter version information",
 		Run: func(cmd *cobra.Command, _ []string) {
-			fmt.Fprintln(cmd.OutOrStdout(), "devdb-openclaw dev")
-		},
-	}
-}
-
-func pendingCommand(use, short string) *cobra.Command {
-	return &cobra.Command{
-		Use:   use,
-		Short: short,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return fmt.Errorf("%s is not implemented", use)
+			fmt.Fprintf(cmd.OutOrStdout(), "devdb-openclaw %s\n", Version)
 		},
 	}
 }
