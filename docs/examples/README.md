@@ -10,7 +10,7 @@ These files are ready-to-drop templates for keeping the metadata hub fresh.
 
 ## Notes
 
-- Replace `/path/to/devdb-or-target-repo` with the repository you want to reconcile.
+- Replace `/path/to/repo` with the repository you want to reconcile.
 - Replace `/usr/local/bin/devdb` if your `devdb` executable lives elsewhere.
-- The examples all use the same core command: `devdb hub-sync`.
+- The examples all use the same core command: `devdb hub sync`.
 - For portable reliability details, see [../metadata-sync-reliability.md](../metadata-sync-reliability.md).

@@ -7,7 +7,8 @@
   <key>ProgramArguments</key>
   <array>
     <string>/usr/local/bin/devdb</string>
-    <string>hub-sync</string>
+    <string>hub</string>
+    <string>sync</string>
     <string>--watch</string>
     <string>--interval</string>
     <string>60</string>
