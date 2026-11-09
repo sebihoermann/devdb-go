@@ -1,5 +1,27 @@
 # devdb-go improvements — implementation plan (2026-11)
 
+> **Status: COMPLETE — all of M1–M6 landed and were re-verified 2026-11-09.**
+> This document is retained as the record of *how* the work was specified and
+> accepted, not as a backlog. Every item below is done; the item bodies are
+> written in the imperative because that is how they were executed, not because
+> they are still pending.
+>
+> The audit that closed this plan, and the evidence for each acceptance
+> criterion, is feedback `f5cb751d` in the `devdb-go` ledger. It was a live
+> re-run against a fresh binary, not a reading of ledger status: `go build`
+> clean, `go test ./... -count=1` green across 28 packages, and every
+> acceptance command executed individually.
+>
+> **Scope note — this plan does not cover the whole backlog.** It addresses
+> findings F1–F9 plus F10 and reconciliation. The `devdb-go` ledger still
+> carries unrelated open findings that no item here was ever meant to close;
+> do not read "this plan is complete" as "the backlog is empty." See feedback
+> `fbaad35f` for that distinction.
+>
+> The sibling plan `devdb-go-improvements` in the same ledger duplicated these
+> items as an earlier backlog. Its remaining items were retired as `wontfix`
+> with pointers to the shipped work; both plans are now `done`.
+
 Implementation-ready companion to the usage analysis that produced findings F1–F9.
 The analysis lives in the `devdb-go-improvements` project ledger as the discussion
 record; this document is the executable plan. Nothing here is speculative: every
@@ -19,9 +41,10 @@ Each item has:
 
 ## Baseline (must be true before item 1)
 
-> **Superseded — re-verified 2026-11-08 after M1–M6 landed.** The table below was
-> the state *before* item 1. It is kept because it is the reason 1.1 came first:
-> a red baseline hides new regressions. The current state follows it.
+> **Historical — kept as the pre-M1 baseline.** The table below was the state
+> before item 1. It is retained because it is the reason 1.1 came first: a red
+> baseline hides new regressions. The "Result now" column records the state at
+> the 2026-11-08 close; both are superseded by the 2026-11-09 audit.
 
 **Original baseline, verified on `main`, 2026-11-08 (pre-M1):**
 
