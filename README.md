@@ -43,6 +43,7 @@ cd /path/to/your-project
 devdb init
 devdb status
 devdb report
+devdb ledger export > docs/ledger.md   # prose report for a human administrator
 devdb feedback add --role user "auth flow is confusing" --severity med
 devdb plan acceptance list --plan my-plan      # criteria for one plan
 devdb archive show <id>                        # read an archived row without restoring

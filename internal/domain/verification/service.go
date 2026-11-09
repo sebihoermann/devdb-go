@@ -216,6 +216,41 @@ func getInputsByExactRunID(db *sql.DB, runID string) ([]Input, error) {
 	return out, rows.Err()
 }
 
+// List returns recent verification runs, newest first.
+//
+// It exists so a reader can summarize the project's verification state
+// without already knowing a run id. The captured output column is loaded as
+// an empty string on purpose: a report quotes the outcome of a run, never
+// the log it produced, and the log can be megabytes of captured test output.
+func List(db *sql.DB, limit int) ([]Run, error) {
+	q := `SELECT id, command, scope, status, git_sha, exit_code, '', COALESCE(notes,''),
+		started_at, COALESCE(finished_at,''), COALESCE(dismissed_at,''),
+		COALESCE(dismissed_reason,''), created_at, model_id
+		FROM verification_runs ORDER BY created_at DESC`
+	args := []any{}
+	if limit > 0 {
+		q += " LIMIT ?"
+		args = append(args, limit)
+	}
+	rows, err := db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Run
+	for rows.Next() {
+		r, err := scanRun(rows)
+		if err != nil {
+			return nil, err
+		}
+		if r == nil {
+			continue
+		}
+		out = append(out, *r)
+	}
+	return out, rows.Err()
+}
+
 // GetFailures returns structured failures for a run.
 func GetFailures(db *sql.DB, runID string, limit int) ([]Failure, error) {
 	id, err := resolveRunID(db, runID)

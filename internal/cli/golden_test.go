@@ -16,10 +16,20 @@ var (
 	reFullID  = regexp.MustCompile(`\b[a-f0-9]{32}\b`)
 	rePrefix  = regexp.MustCompile(`\b[a-f0-9]{8}\b`)
 	reGitLine = regexp.MustCompile(`(?m)^git:.*\n?`)
+	// reDate normalizes calendar dates. Rows stamped by the CLI carry the
+	// moment they were written, so a golden that quoted them would need
+	// rewriting every day. The date is not what the golden is pinning.
+	//
+	// It is matched without word boundaries: an underscore is a word
+	// character, so \b would not match between "_Logged " and the year and
+	// the date would survive untouched. The optional time suffix covers a raw
+	// RFC3339 stamp, whose clock would otherwise churn on every run.
+	reDate = regexp.MustCompile(`\d{4}-\d{2}-\d{2}(?:T[\d:.]+(?:Z|[+-][\d:]+)?)?`)
 )
 
 func normalizeGolden(s string) string {
 	s = reGitLine.ReplaceAllString(s, "")
+	s = reDate.ReplaceAllString(s, "<DATE>")
 	s = reFullID.ReplaceAllString(s, "<ID>")
 	s = rePrefix.ReplaceAllString(s, "<PREFIX>")
 	return strings.TrimSpace(s) + "\n"

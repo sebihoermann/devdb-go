@@ -717,11 +717,53 @@ Run grass-cutter heuristics to surface dead code and sprawl
 
 ## devdb ledger
 
-Bundled hygiene operations on the devdb ledger
+Whole-ledger operations: hygiene bundles and prose reports
 
 | Verb | Summary |
 |---|---|
+| `export` | Render the ledger as a prose report |
 | `housekeeping` | Bundled hygiene: archive run --yes, plan reconcile --apply, inventory scan, optional verify query |
+
+#### `devdb ledger export`
+
+Render the ledger as a prose report for a human administrator.
+
+The report says what state the project is in, what is moving, what is stuck,
+and what needs a decision. It is written to stdout so it can be piped into a
+file and committed:
+
+  devdb ledger export > docs/ledger.md
+
+Use --view to narrow the document to the parts you care about, and the global
+--all to lift the per-section row caps.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--generated-at` | false | stamp the current time into the report header |
+| `--output` | — | write the report to PATH instead of stdout |
+| `--view` | [] | views to include: summary, delivery, quality, work, architecture, feedback |
+
+Examples:
+
+```bash
+devdb ledger export                     # prose report on stdout
+devdb ledger export > docs/ledger.md     # commit it
+devdb ledger export --view summary       # posture and the decisions only
+devdb ledger export --view delivery,quality
+devdb ledger export --all                # lift the per-section row caps
+
+The report is prose for a human administrator: what state the project is in,
+what is moving, what is stuck, and what needs a decision.
+
+Deterministic by default. There is no wall-clock stamp unless --generated-at
+is passed, and recorded dates render absolutely, so regenerating the report
+from an unchanged ledger produces an unchanged file. A diff in the committed
+copy means the ledger really moved.
+
+An unknown --view value is an error (exit code ExitUsage) that names the
+known views, so a typo cannot silently produce a shorter document that still
+looks complete.
+```
 
 #### `devdb ledger housekeeping`
 

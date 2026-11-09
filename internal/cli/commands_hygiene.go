@@ -424,15 +424,23 @@ func cmdDoctorHygiene(open opener) *cobra.Command {
 	}
 }
 
-// cmdLedger returns the "ledger" noun with bundled hygiene verbs. The
-// "housekeeping" verb is the cron-safe, end-of-session batch that combines
+// cmdLedger returns the "ledger" noun: verbs that act on the ledger as a
+// whole rather than on one row of it.
+//
+// The "housekeeping" verb is the cron-safe, end-of-session batch that combines
 // archive run --yes, plan reconcile --apply, inventory scan, and an
 // optional verify query so weekly cron entries and end-of-session agents
 // do not have to hand-craft the sequence (the friction called out in
 // docs/workflow-review-2026-06-24.md).
+//
+// The "export" verb renders the same ledger as a prose report for a human
+// administrator, which is a whole-ledger read rather than a hygiene write —
+// but it belongs here because it, too, is about the ledger in aggregate
+// rather than one row.
 func cmdLedger(open opener) *cobra.Command {
-	ledger := failClosed(&cobra.Command{Use: "ledger", Short: "Bundled hygiene operations on the devdb ledger"})
+	ledger := failClosed(&cobra.Command{Use: "ledger", Short: "Whole-ledger operations: hygiene bundles and prose reports"})
 	ledger.AddCommand(cmdLedgerHousekeeping(open))
+	ledger.AddCommand(cmdLedgerExport(open))
 	return ledger
 }
 

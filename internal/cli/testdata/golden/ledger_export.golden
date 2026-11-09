@@ -1,0 +1,64 @@
+# Ledger report — repo
+
+_schema `go` v4_
+
+Read from `.devdb/development.db`. Regenerate with `devdb ledger export`.
+
+## Contents
+
+- [Summary](#summary)
+- [Delivery](#delivery)
+- [Quality](#quality)
+- [Work waiting on people](#work-waiting-on-people)
+- [Architecture](#architecture)
+- [Feedback](#feedback)
+
+## Summary
+
+**Posture: planned.** Nothing is in progress, but 1 plan item is planned and waiting to start; the ledger was last written on <DATE>.
+
+The ledger holds 1 open feedback entry.
+
+**One thing needs a decision.**
+
+- Nothing is in progress, so 1 item of queued work is not moving.
+
+## Delivery
+
+### Golden plan
+
+Plan `golden` is active. Of 1 item, 1 is not started.
+
+#### M1 — M1
+
+Of 1 item, 1 is not started.
+
+- ○ **Ship feature** — not started
+
+## Quality
+
+**Review findings.** No review findings are open.
+
+**Architecture notes.** No architecture notes are recorded.
+
+**Verification.** No verification run has been recorded, so nothing in this ledger is known to pass.
+
+## Work waiting on people
+
+**Tasks.** No tasks are open.
+
+**Reminders.** No reminders are open.
+
+## Architecture
+
+No architecture notes are recorded, so the project carries no written explanation of how it works.
+
+## Feedback
+
+1 feedback entry is open.
+
+### <PREFIX> · med · model
+
+> open feedback note
+
+_Logged <DATE>_

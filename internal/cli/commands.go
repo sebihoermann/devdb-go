@@ -1185,6 +1185,23 @@ Non-interactive by design: --yes suppresses the confirmation prompt,
 --json is machine-readable. Cron entry:
 
   0 3 * * 0  cd /path/to/repo && devdb archive run --yes --json >> .devdb/archive.log 2>&1`,
+	"ledger export": `devdb ledger export                     # prose report on stdout
+devdb ledger export > docs/ledger.md     # commit it
+devdb ledger export --view summary       # posture and the decisions only
+devdb ledger export --view delivery,quality
+devdb ledger export --all                # lift the per-section row caps
+
+The report is prose for a human administrator: what state the project is in,
+what is moving, what is stuck, and what needs a decision.
+
+Deterministic by default. There is no wall-clock stamp unless --generated-at
+is passed, and recorded dates render absolutely, so regenerating the report
+from an unchanged ledger produces an unchanged file. A diff in the committed
+copy means the ledger really moved.
+
+An unknown --view value is an error (exit code ExitUsage) that names the
+known views, so a typo cannot silently produce a shorter document that still
+looks complete.`,
 	"ledger housekeeping": `devdb ledger housekeeping                 # run archive + reconcile + inventory scan + verify query
 devdb ledger housekeeping --dry-run       # preview without writing
 devdb ledger housekeeping --json          # machine-readable output

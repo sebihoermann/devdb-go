@@ -556,6 +556,7 @@ devdb-openclaw doctor      --workspace <ws> --repo <repo>
 ## Other useful reads
 
 - `devdb report` — whole-project overview (use `--all` for more feedback rows).
+- `devdb ledger export` — the ledger as a prose report for a human administrator: what state the project is in, what is moving, what is stuck, what needs a decision. Writes to stdout, so `devdb ledger export > docs/ledger.md` commits it. `--view summary|delivery|quality|work|architecture|feedback` narrows the document; `--all` lifts the row caps. Deterministic by default — no wall-clock stamp unless `--generated-at` — so an unchanged ledger produces an unchanged file.
 - `devdb status --json` — one-line delivery snapshot.
 - `devdb hub audit` — one-command cross-project open issues + plans snapshot. The session-start cross-project read.
 - `devdb inventory context --files PATH ...` — arch notes, findings, reminders for files you will touch; `--strict` exits non-zero on stale notes or high findings.
@@ -582,7 +583,7 @@ devdb-openclaw doctor      --workspace <ws> --repo <repo>
 
 **Hub:** `hub register|unregister|list|sync|dashboard|project|doctor|across`
 
-**Hygiene / analytics:** `archive run|list|show|restore|gc` · `analytics missed|summary` · `ledger housekeeping` (bundled archive + reconcile + scan + optional verify)
+**Hygiene / analytics:** `archive run|list|show|restore|gc` · `analytics missed|summary` · `ledger housekeeping` (bundled archive + reconcile + scan + optional verify) · `ledger export` (prose report of the whole ledger)
 
 **Reads:** `status`, `quality`, `report`, `resume`, `doctor`, `help`, `list`, `show` · `plan status <slug-or-id>` is scoped per plan since 9347a13 (no-arg or `--global` = fleet aggregate; unknown ref exits non-zero)
 
